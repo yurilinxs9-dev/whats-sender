@@ -599,10 +599,10 @@ export default function CampaignsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardContent className="p-4 space-y-3">
-              <h3 className="font-semibold text-text-primary">Template</h3>
+              <h3 className="font-semibold text-text-primary">Mensagem</h3>
               <div>
-                <p className="text-sm text-text-primary">{c.template.nome}</p>
-                <Badge variant="outline" className="mt-1 text-xs">{c.template.type}</Badge>
+                <p className="text-sm text-text-primary">{c.template?.nome ?? 'Mensagem direta'}</p>
+                <Badge variant="outline" className="mt-1 text-xs">{c.template?.type ?? 'INLINE'}</Badge>
               </div>
             </CardContent>
           </Card>
@@ -808,9 +808,9 @@ export default function CampaignsPage() {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-text-secondary">
-                        <span>{campaign.template.nome}</span>
+                        <span>{campaign.template?.nome ?? 'Msg direta'}</span>
                         <span>|</span>
-                        <span>{campaign.contact_list.nome} ({campaign.contact_list.total_count})</span>
+                        <span>{campaign.contact_list?.nome ?? '—'} ({campaign.contact_list?.total_count ?? 0})</span>
                       </div>
                     </div>
 
