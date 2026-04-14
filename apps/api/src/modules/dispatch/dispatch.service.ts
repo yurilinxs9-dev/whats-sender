@@ -180,11 +180,14 @@ export class DispatchService {
       dispatched++;
     }
 
+    const finalStatus = dispatched === 0 ? 'COMPLETED' : 'RUNNING';
+
     await this.prisma.campaign.update({
       where: { id: campaignId },
       data: {
-        status: 'RUNNING',
+        status: finalStatus,
         started_at: new Date(),
+        finished_at: dispatched === 0 ? new Date() : undefined,
         total_contacts: dispatched + skipped,
       },
     });
