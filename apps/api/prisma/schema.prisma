@@ -1,0 +1,421 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// Tenant & Auth
+// ============================================================
+model Tenant {
+  id         String   @id @default(uuid())
+  nome       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users         User[]
+  instances     Instance[]
+  contacts      Contact[]
+  contact_lists ContactList[]
+  templates     Template[]
+  campaigns     Campaign[]
+  blacklist     Blacklist[]
+  settings      TenantSettings?
+}
+
+model User {
+  id         String   @id @default(uuid())
+  nome       String
+  email      String   @unique
+  senha_hash String
+  role       Role     @default(OPERATOR)
+  avatar_url String?
+  tenant_id  String
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([tenant_id])
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+model TenantSettings {
+  id                     String   @id @default(uuid())
+  tenant_id              String   @unique
+  tenant                 Tenant   @relation(fields: [tenant_id], references: [id])
+  delay_min              Int      @default(8)
+  delay_max              Int      @default(20)
+  daily_limit_default    Int      @default(500)
+  send_window_start      String   @default("08:00")
+  send_window_end        String   @default("20:00")
+  lunch_pause_start      String   @default("12:00")
+  lunch_pause_end        String   @default("13:00")
+  max_campaigns_parallel Int      @default(3)
+  frequency_cap_days     Int      @default(7)
+  block_rate_threshold   Float    @default(0.02)
+  reply_rate_alert       Float    @default(0.15)
+  warmup_enabled         Boolean  @default(true)
+  updated_at             DateTime @updatedAt
+}
+
+// ============================================================
+// Instances WhatsApp + Stealth
+// ============================================================
+model Instance {
+  id         String   @id @default(uuid())
+  nome       String   @unique
+  telefone   String?
+  status     String   @default("disconnected")
+  config     Json?
+  tenant_id  String
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Limits (adjusted by StealthAI)
+  daily_limit      Int      @default(1000)
+  daily_sent       Int      @default(0)
+  buddy_sent_today Int      @default(0)
+  weekly_sent      Int      @default(0)
+  last_daily_reset DateTime @default(now())
+  last_weekly_reset DateTime @default(now())
+
+  // Warmup
+  warmup_phase        WarmupPhase @default(ACTIVATION)
+  warmup_started_at   DateTime    @default(now())
+  warmup_completed    Boolean     @default(false)
+  warmup_day          Int         @default(1)
+
+  // Health
+  health_score      Int       @default(100)
+  consecutive_fails Int       @default(0)
+  last_error        String?
+  cooldown_until    DateTime?
+  last_sent_at      DateTime?
+  avg_response_ms   Int?
+
+  // Reputation
+  total_sent_lifetime Int   @default(0)
+  total_delivered     Int   @default(0)
+  total_read          Int   @default(0)
+  total_failed        Int   @default(0)
+  total_blocked       Int   @default(0)
+  reply_rate_7d       Float @default(0)
+
+  campaign_instances CampaignInstance[]
+  health_logs        InstanceHealthLog[]
+  warmup_logs        WarmupLog[]
+
+  @@index([tenant_id])
+  @@index([status])
+  @@index([health_score])
+}
+
+enum WarmupPhase {
+  ACTIVATION
+  BUILDING
+  ACCELERATION
+  STABILIZATION
+  PRODUCTION
+  FULL_CAPACITY
+}
+
+model InstanceHealthLog {
+  id           String   @id @default(uuid())
+  instance_id  String
+  instance     Instance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+  health_score Int
+  event        String
+  details      Json?
+  created_at   DateTime @default(now())
+
+  @@index([instance_id, created_at])
+}
+
+model WarmupLog {
+  id          String      @id @default(uuid())
+  instance_id String
+  instance    Instance    @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+  phase       WarmupPhase
+  day         Int
+  msgs_sent   Int
+  msgs_limit  Int
+  replies     Int
+  blocks      Int
+  notes       String?
+  created_at  DateTime    @default(now())
+
+  @@index([instance_id, created_at])
+}
+
+// ============================================================
+// StealthAI Decision Log
+// ============================================================
+model StealthDecisionLog {
+  id          String   @id @default(uuid())
+  instance_id String?
+  campaign_id String?
+  decision    String
+  reasoning   String
+  inputs      Json
+  output      Json
+  created_at  DateTime @default(now())
+
+  @@index([instance_id, created_at])
+  @@index([campaign_id, created_at])
+}
+
+// ============================================================
+// Buddy Pool
+// ============================================================
+model BuddyPair {
+  id                  String    @id @default(uuid())
+  instance_id         String
+  buddy_id            String
+  active              Boolean   @default(true)
+  msgs_today          Int       @default(0)
+  last_msg_at         DateTime?
+  conversation_topics String[]  @default([])
+  tenant_id           String
+  created_at          DateTime  @default(now())
+
+  @@unique([instance_id, buddy_id])
+  @@index([instance_id])
+}
+
+model BuddyMessage {
+  id         String   @id @default(uuid())
+  pair_id    String
+  direction  String
+  content    String
+  type       String   @default("TEXT")
+  created_at DateTime @default(now())
+
+  @@index([pair_id, created_at])
+}
+
+// ============================================================
+// Contacts & Lists
+// ============================================================
+model Contact {
+  id              String            @id @default(uuid())
+  nome            String?
+  telefone        String
+  tags            String[]          @default([])
+  metadata        Json?
+  whatsapp_valid  Boolean?
+  validated_at    DateTime?
+  engagement      ContactEngagement @default(UNKNOWN)
+  last_contacted  DateTime?
+  times_contacted Int               @default(0)
+  times_replied   Int               @default(0)
+  times_blocked   Int               @default(0)
+  tenant_id       String
+  tenant          Tenant            @relation(fields: [tenant_id], references: [id])
+  created_at      DateTime          @default(now())
+
+  list_contacts ListContact[]
+  dispatches    Dispatch[]
+
+  @@unique([telefone, tenant_id])
+  @@index([tenant_id])
+  @@index([engagement])
+  @@index([whatsapp_valid])
+}
+
+enum ContactEngagement {
+  UNKNOWN
+  COLD
+  WARM
+  HOT
+  BLOCKED
+}
+
+model ContactList {
+  id          String   @id @default(uuid())
+  nome        String
+  descricao   String?
+  total_count Int      @default(0)
+  valid_count Int      @default(0)
+  tenant_id   String
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+  created_at  DateTime @default(now())
+
+  contacts  ListContact[]
+  campaigns Campaign[]
+
+  @@index([tenant_id])
+}
+
+model ListContact {
+  id              String      @id @default(uuid())
+  contact_list_id String
+  contact_id      String
+  contact_list    ContactList @relation(fields: [contact_list_id], references: [id], onDelete: Cascade)
+  contact         Contact     @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+
+  @@unique([contact_list_id, contact_id])
+}
+
+model Blacklist {
+  id         String   @id @default(uuid())
+  telefone   String
+  reason     String?
+  tenant_id  String
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+  created_at DateTime @default(now())
+
+  @@unique([telefone, tenant_id])
+  @@index([tenant_id])
+}
+
+// ============================================================
+// Templates + Content Spin
+// ============================================================
+model Template {
+  id         String      @id @default(uuid())
+  nome       String
+  type       MessageType @default(TEXT)
+  content    String
+  media_url  String?
+  media_name String?
+  has_spin   Boolean     @default(false)
+  has_optout Boolean     @default(false)
+  tenant_id  String
+  tenant     Tenant      @relation(fields: [tenant_id], references: [id])
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+
+  campaigns Campaign[]
+
+  @@index([tenant_id])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+// ============================================================
+// Campaigns
+// ============================================================
+model Campaign {
+  id              String         @id @default(uuid())
+  nome            String
+  status          CampaignStatus @default(DRAFT)
+  contact_list_id String
+  contact_list    ContactList    @relation(fields: [contact_list_id], references: [id])
+  template_id     String?
+  template        Template?      @relation(fields: [template_id], references: [id])
+  inline_message  String?
+  delay_min       Int            @default(8)
+  delay_max       Int            @default(20)
+  scheduled_at    DateTime?
+  started_at      DateTime?
+  finished_at     DateTime?
+  paused_at       DateTime?
+  tenant_id       String
+  tenant          Tenant         @relation(fields: [tenant_id], references: [id])
+  created_at      DateTime       @default(now())
+
+  // Stealth config per campaign
+  use_spin    Boolean @default(true)
+  use_composing Boolean @default(true)
+  skip_invalid Boolean @default(true)
+  skip_blocked Boolean @default(true)
+  skip_recent  Boolean @default(true)
+
+  // Metrics (updated by worker)
+  total_contacts  Int @default(0)
+  total_valid     Int @default(0)
+  total_sent      Int @default(0)
+  total_delivered Int @default(0)
+  total_read      Int @default(0)
+  total_replied   Int @default(0)
+  total_failed    Int @default(0)
+  total_blocked   Int @default(0)
+  total_optout    Int @default(0)
+
+  instances  CampaignInstance[]
+  dispatches Dispatch[]
+
+  @@index([tenant_id])
+  @@index([status])
+}
+
+enum CampaignStatus {
+  DRAFT
+  VALIDATING
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+model CampaignInstance {
+  id          String   @id @default(uuid())
+  campaign_id String
+  instance_id String
+  campaign    Campaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  instance    Instance @relation(fields: [instance_id], references: [id])
+  msgs_sent   Int      @default(0)
+
+  @@unique([campaign_id, instance_id])
+}
+
+// ============================================================
+// Dispatches
+// ============================================================
+model Dispatch {
+  id              String         @id @default(uuid())
+  campaign_id     String
+  campaign        Campaign       @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  contact_id      String
+  contact         Contact        @relation(fields: [contact_id], references: [id])
+  instance_id     String?
+  instance_name   String?
+  whatsapp_msg_id String?        @unique
+  status          DispatchStatus @default(PENDING)
+  error           String?
+  attempts        Int            @default(0)
+  spun_content    String?
+  sent_at         DateTime?
+  delivered_at    DateTime?
+  read_at         DateTime?
+  replied_at      DateTime?
+  blocked_at      DateTime?
+  created_at      DateTime       @default(now())
+
+  @@index([campaign_id, status])
+  @@index([contact_id])
+  @@index([instance_id])
+}
+
+enum DispatchStatus {
+  PENDING
+  VALIDATING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  REPLIED
+  FAILED
+  SKIPPED
+  BLOCKED
+  OPTOUT
+}

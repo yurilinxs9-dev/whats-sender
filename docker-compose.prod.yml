@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  sender-redis:
+    image: redis:7-alpine
+    container_name: sender-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - sender-redis-data:/data
+    networks:
+      - sender-network
+
+  sender-backend:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: sender-backend
+    restart: unless-stopped
+    ports:
+      - "3003:3001"
+    depends_on:
+      - sender-redis
+    env_file:
+      - .env.production
+    environment:
+      - REDIS_URL=redis://sender-redis:6379
+      - PORT=3001
+      - NODE_ENV=production
+    networks:
+      - sender-network
+
+  sender-nginx:
+    image: nginx:alpine
+    container_name: sender-nginx
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - sender-backend
+    networks:
+      - sender-network
+
+networks:
+  sender-network:
+    driver: bridge
+
+volumes:
+  sender-redis-data:
