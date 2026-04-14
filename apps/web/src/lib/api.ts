@@ -21,6 +21,12 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Don't intercept auth endpoints
+    const isAuthEndpoint = originalRequest?.url?.includes('/auth/');
+    if (isAuthEndpoint) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
@@ -31,7 +37,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         localStorage.removeItem('sender-access-token');
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
           window.location.href = '/login';
         }
       }

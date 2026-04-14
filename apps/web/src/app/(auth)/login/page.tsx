@@ -22,22 +22,6 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Demo mode: bypass backend when API is unavailable
-      if (email === 'admin@sender.com' && senha === 'admin123') {
-        setAuth(
-          {
-            id: 'demo-admin-id',
-            nome: 'Admin',
-            email: 'admin@sender.com',
-            role: 'ADMIN',
-            tenantId: 'demo-tenant-id',
-          },
-          'demo-token',
-        );
-        router.push('/');
-        return;
-      }
-
       const { data } = await api.post('/auth/login', { email, senha });
       setAuth(
         {
@@ -106,12 +90,6 @@ export default function LoginPage() {
                 'Entrar'
               )}
             </Button>
-            <div className="mt-3 rounded-lg border border-border bg-zinc-900/50 p-3">
-              <p className="text-xs text-text-secondary">
-                <span className="font-medium text-primary">Demo:</span>{' '}
-                admin@sender.com / admin123
-              </p>
-            </div>
           </form>
         </CardContent>
       </Card>
