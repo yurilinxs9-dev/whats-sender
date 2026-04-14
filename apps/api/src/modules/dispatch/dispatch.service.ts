@@ -105,10 +105,10 @@ export class DispatchService {
     });
     const blacklistedSet = new Set(blacklist.map((b) => b.telefone));
 
-    const freqCapDays = settings?.frequency_cap_days ?? 7;
-    const freqCapDate = new Date(
-      Date.now() - freqCapDays * 24 * 60 * 60 * 1000,
-    );
+    const freqCapDays = settings?.frequency_cap_days ?? 0;
+    const freqCapDate = freqCapDays > 0
+      ? new Date(Date.now() - freqCapDays * 24 * 60 * 60 * 1000)
+      : null;
 
     let dispatched = 0;
     let skipped = 0;
@@ -118,24 +118,28 @@ export class DispatchService {
       // Validate phone format — must be 12-13 digits starting with 55
       const phone = contact.telefone.replace(/\D/g, '');
       if (phone.length < 12 || phone.length > 13 || !phone.startsWith('55')) {
+        this.logger.warn(`Skipped ${contact.telefone}: invalid phone format (${phone.length} digits)`);
         skipped++;
         continue;
       }
 
       // Skip blacklisted
       if (blacklistedSet.has(contact.telefone)) {
+        this.logger.warn(`Skipped ${contact.telefone}: blacklisted`);
         skipped++;
         continue;
       }
 
       // Skip blocked contacts
       if (contact.engagement === 'BLOCKED') {
+        this.logger.warn(`Skipped ${contact.telefone}: blocked`);
         skipped++;
         continue;
       }
 
       // Skip frequency cap (contacted within X days)
-      if (contact.last_contacted && contact.last_contacted > freqCapDate) {
+      if (freqCapDate && contact.last_contacted && contact.last_contacted > freqCapDate) {
+        this.logger.warn(`Skipped ${contact.telefone}: frequency cap (${freqCapDays}d)`);
         skipped++;
         continue;
       }
