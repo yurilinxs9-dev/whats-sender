@@ -141,7 +141,21 @@ export class InstancesService {
       }
     }
 
-    await this.prisma.instance.delete({ where: { id } });
+    // Clean up related records that don't have onDelete: Cascade
+    await this.prisma.$transaction([
+      this.prisma.dispatch.updateMany({
+        where: { instance_id: id },
+        data: { instance_id: null },
+      }),
+      this.prisma.campaignInstance.deleteMany({
+        where: { instance_id: id },
+      }),
+      this.prisma.buddyPair.deleteMany({
+        where: { OR: [{ instance_id: id }, { buddy_id: id }] },
+      }),
+      this.prisma.instance.delete({ where: { id } }),
+    ]);
+
     this.gateway.emitInstanceStatusChanged(instance.nome, 'deleted', tenantId);
     return { message: 'Instancia removida com sucesso' };
   }
