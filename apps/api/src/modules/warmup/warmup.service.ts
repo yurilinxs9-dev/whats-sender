@@ -125,10 +125,60 @@ export class WarmupService {
       });
     }
 
-    if (buddies.length === 0) return;
-
     const token = (instance.config as Record<string, string> | null)?.uazapi_token ?? '';
     let sent = 0;
+
+    // If no buddies (single instance), send self-warmup messages to own number
+    if (buddies.length === 0) {
+      const selfPhone = await this.prisma.instance.findUnique({
+        where: { id: instance.id },
+        select: { telefone: true },
+      });
+
+      if (!selfPhone?.telefone) {
+        this.logger.warn(`No buddies and no phone for ${instance.nome} — skipping warmup msgs`);
+        return;
+      }
+
+      // Send warmup messages to contacts in tenant (if any exist)
+      const contacts = await this.prisma.contact.findMany({
+        where: { tenant_id: instance.tenant_id },
+        take: count,
+        select: { telefone: true },
+      });
+
+      const targets = contacts.length > 0
+        ? contacts.map((c) => c.telefone)
+        : [selfPhone.telefone]; // fallback: msg to self
+
+      for (const phone of targets) {
+        if (sent >= count) break;
+
+        const template = this.GREETINGS[Math.floor(Math.random() * this.GREETINGS.length)];
+        const message = this.spin.processMessage(template, {});
+
+        try {
+          await this.uazApi.setPresence(token, phone, 'composing');
+          await this.delay(1000 + Math.random() * 2000);
+          await this.uazApi.sendText(token, phone, message);
+
+          await this.prisma.instance.update({
+            where: { id: instance.id },
+            data: { buddy_sent_today: { increment: 1 } },
+          });
+
+          sent++;
+          this.logger.log(`Warmup msg sent from ${instance.nome} to ${phone}`);
+        } catch (error) {
+          this.logger.warn(
+            `Warmup msg failed for ${instance.nome}: ${error instanceof Error ? error.message : 'unknown'}`,
+          );
+        }
+
+        await this.delay(5000 + Math.random() * 10000);
+      }
+      return;
+    }
 
     for (const buddy of buddies) {
       if (sent >= count) break;
