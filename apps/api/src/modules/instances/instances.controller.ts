@@ -81,6 +81,20 @@ export class InstancesController {
     return this.instancesService.connect(id, req.user.tenantId);
   }
 
+  @Post(':id/connect-phone')
+  @HttpCode(200)
+  async connectByPhone(
+    @Param('id') id: string,
+    @Body() body: { phoneNumber: string },
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    const phoneNumber = typeof body.phoneNumber === 'string' ? body.phoneNumber.replace(/\D/g, '') : '';
+    if (!phoneNumber || phoneNumber.length < 10) {
+      throw new Error('Numero de telefone invalido');
+    }
+    return this.instancesService.connectByPhone(id, phoneNumber, req.user.tenantId);
+  }
+
   @Get(':id/qrcode')
   async getQrCode(
     @Param('id') id: string,

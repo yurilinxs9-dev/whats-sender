@@ -103,6 +103,30 @@ export class UazApiService {
     };
   }
 
+  async connectWithPairingCode(
+    instanceToken: string,
+    phoneNumber: string,
+  ): Promise<{ pairingCode: string; state: string }> {
+    const res = await this.request('/instance/pairingcode', {
+      method: 'POST',
+      tokenType: 'instance',
+      token: instanceToken,
+      body: { number: phoneNumber },
+    });
+
+    const data = (await res.json()) as Record<string, unknown>;
+
+    if (!res.ok) {
+      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      throw new Error(`UazAPI pairingCode failed: ${msg}`);
+    }
+
+    return {
+      pairingCode: (data.pairingCode as string) || (data.code as string) || '',
+      state: (data.state as string) || 'connecting',
+    };
+  }
+
   async deleteInstance(instanceToken: string): Promise<void> {
     await this.request('/instance', {
       method: 'DELETE',

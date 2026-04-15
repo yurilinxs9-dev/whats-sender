@@ -191,6 +191,34 @@ export class InstancesService {
     };
   }
 
+  async connectByPhone(id: string, phoneNumber: string, tenantId: string) {
+    const instance = await this.prisma.instance.findFirst({
+      where: { id, tenant_id: tenantId },
+    });
+    if (!instance) throw new NotFoundException('Instancia nao encontrada');
+
+    const config = (instance.config as InstanceConfig) || {};
+    if (!config.uazapi_token) {
+      throw new NotFoundException('Instancia sem token UazAPI. Recrie a instancia.');
+    }
+
+    const result = await this.uazApi.connectWithPairingCode(config.uazapi_token, phoneNumber);
+
+    await this.prisma.instance.update({
+      where: { id },
+      data: { status: 'connecting' },
+    });
+
+    this.gateway.emitInstanceStatusChanged(instance.nome, 'connecting', tenantId);
+
+    return {
+      id: instance.id,
+      nome: instance.nome,
+      status: 'connecting',
+      pairingCode: result.pairingCode,
+    };
+  }
+
   async getQrCode(id: string, tenantId: string) {
     const instance = await this.prisma.instance.findFirst({
       where: { id, tenant_id: tenantId },
