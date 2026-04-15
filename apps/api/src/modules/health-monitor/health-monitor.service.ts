@@ -330,12 +330,15 @@ export class HealthMonitorService {
   private mapStatus(state: string): string {
     switch (state) {
       case 'open':
+      case 'connected':
         return 'connected';
       case 'close':
+      case 'disconnected':
         return 'disconnected';
       case 'connecting':
         return 'connecting';
       default:
+        this.logger.warn(`Unknown UazAPI state: "${state}" — treating as disconnected`);
         return 'disconnected';
     }
   }
