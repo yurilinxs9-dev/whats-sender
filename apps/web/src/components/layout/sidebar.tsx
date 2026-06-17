@@ -17,6 +17,7 @@ import {
   Menu,
   LogOut,
   MessageSquare,
+  UsersRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -33,6 +34,7 @@ const menuItems = [
   { label: 'Contatos', icon: Users, href: '/contacts' },
   { label: 'Templates', icon: FileText, href: '/templates' },
   { label: 'Instancias', icon: Smartphone, href: '/instances' },
+  { label: 'Grupos', icon: UsersRound, href: '/group-sync' },
   { label: 'Relatorios', icon: BarChart3, href: '/reports' },
   { label: 'Configuracoes', icon: Settings, href: '/settings' },
 ];
