@@ -26,6 +26,7 @@ model Tenant {
   campaigns     Campaign[]
   blacklist     Blacklist[]
   settings      TenantSettings?
+  group_syncs   GroupSync[]
 }
 
 model User {
@@ -114,6 +115,7 @@ model Instance {
   campaign_instances CampaignInstance[]
   health_logs        InstanceHealthLog[]
   warmup_logs        WarmupLog[]
+  group_syncs        GroupSync[]
 
   @@index([tenant_id])
   @@index([status])
@@ -418,4 +420,66 @@ enum DispatchStatus {
   SKIPPED
   BLOCKED
   OPTOUT
+}
+
+// ============================================================
+// Group Sync
+// ============================================================
+model GroupSync {
+  id               String          @id @default(uuid())
+  nome             String
+  source_group_jid String
+  dest_group_jid   String
+  instance_id      String
+  instance         Instance        @relation(fields: [instance_id], references: [id])
+  tenant_id        String
+  tenant           Tenant          @relation(fields: [tenant_id], references: [id])
+  status           GroupSyncStatus @default(IDLE)
+  extracted_count  Int             @default(0)
+  added_count      Int             @default(0)
+  failed_count     Int             @default(0)
+  daily_add_cap    Int             @default(50)
+  added_today      Int             @default(0)
+  last_reset_at    DateTime        @default(now())
+  last_run_at      DateTime?
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+
+  participants GroupSyncParticipant[]
+
+  @@index([tenant_id])
+  @@index([status])
+}
+
+enum GroupSyncStatus {
+  IDLE
+  EXTRACTING
+  ADDING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+model GroupSyncParticipant {
+  id         String               @id @default(uuid())
+  sync_id    String
+  sync       GroupSync            @relation(fields: [sync_id], references: [id], onDelete: Cascade)
+  jid        String
+  phone      String
+  status     ParticipantAddStatus @default(PENDING)
+  attempts   Int                  @default(0)
+  error      String?
+  added_at   DateTime?
+  created_at DateTime             @default(now())
+
+  @@unique([sync_id, jid])
+  @@index([sync_id, status])
+}
+
+enum ParticipantAddStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  SKIPPED
 }

@@ -21,6 +21,7 @@ import { HealthMonitorModule } from './modules/health-monitor/health-monitor.mod
 import { HealthController } from './modules/health/health.controller';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
+import { GroupsModule } from './modules/groups/groups.module';
 
 @Module({
   controllers: [HealthController],
@@ -62,6 +63,7 @@ import { WebhookModule } from './modules/webhook/webhook.module';
     HealthMonitorModule,
     DispatchModule,
     WebhookModule,
+    GroupsModule,
   ],
   providers: [
     {

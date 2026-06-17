@@ -22,3 +22,17 @@ export interface UazApiCreateInstanceResult {
   token: string;
   status: string;
 }
+
+export interface UazApiGroupParticipant {
+  id: string;   // JID: 5511999...@s.whatsapp.net
+  admin: string | null;
+}
+
+export interface UazApiGroupParticipantsResult {
+  participants: UazApiGroupParticipant[];
+}
+
+export interface UazApiAddParticipantsResult {
+  added: { jid: string; status: string }[];
+  failed: { jid: string; status: string }[];
+}

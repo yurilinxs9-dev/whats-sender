@@ -5,6 +5,8 @@ import type {
   UazApiNumberCheck,
   UazApiInstanceStatus,
   UazApiCreateInstanceResult,
+  UazApiGroupParticipantsResult,
+  UazApiAddParticipantsResult,
 } from './uazapi.types';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -245,6 +247,70 @@ export class UazApiService {
         enabled: true,
       },
     });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Group endpoints (instance token)                                  */
+  /* ------------------------------------------------------------------ */
+
+  // UazAPI: GET /group/participants?groupId={jid}
+  async getGroupParticipants(
+    instanceToken: string,
+    groupJid: string,
+  ): Promise<UazApiGroupParticipantsResult> {
+    const res = await this.request(`/group/participants?groupId=${encodeURIComponent(groupJid)}`, {
+      method: 'GET',
+      tokenType: 'instance',
+      token: instanceToken,
+    });
+    const data = (await res.json()) as Record<string, unknown>;
+    if (!res.ok) {
+      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      throw new Error(`UazAPI getGroupParticipants failed: ${msg}`);
+    }
+    const raw = Array.isArray(data.participants) ? data.participants : [];
+    return {
+      participants: (raw as Record<string, unknown>[]).map((p) => ({
+        id: p.id as string,
+        admin: typeof p.admin === 'string' ? p.admin : null,
+      })),
+    };
+  }
+
+  // UazAPI: PUT /group/participants { groupId, action: "add", participants: [{id}] }
+  async addGroupParticipants(
+    instanceToken: string,
+    groupJid: string,
+    participantJids: string[],
+  ): Promise<UazApiAddParticipantsResult> {
+    const res = await this.request('/group/participants', {
+      method: 'POST',
+      tokenType: 'instance',
+      token: instanceToken,
+      body: {
+        groupId: groupJid,
+        action: 'add',
+        participants: participantJids.map((id) => ({ id })),
+      },
+    });
+    const data = (await res.json()) as Record<string, unknown>;
+    if (!res.ok) {
+      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      throw new Error(`UazAPI addGroupParticipants failed: ${msg}`);
+    }
+    const added = Array.isArray(data.add)
+      ? (data.add as Record<string, unknown>[]).map((r) => ({
+          jid: r.jid as string,
+          status: r.status as string,
+        }))
+      : [];
+    const failed = Array.isArray(data.failed)
+      ? (data.failed as Record<string, unknown>[]).map((r) => ({
+          jid: r.jid as string,
+          status: r.status as string,
+        }))
+      : [];
+    return { added, failed };
   }
 
   /* ------------------------------------------------------------------ */
