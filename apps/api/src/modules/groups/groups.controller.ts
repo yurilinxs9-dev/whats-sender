@@ -19,6 +19,14 @@ import type { Request } from 'express';
 export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
+  @Get('instances/:instanceId/groups')
+  listInstanceGroups(
+    @Req() req: Request & { user: AuthUser },
+    @Param('instanceId') instanceId: string,
+  ) {
+    return this.groupsService.listInstanceGroups(req.user.tenantId, instanceId);
+  }
+
   @Post()
   create(@Req() req: Request & { user: AuthUser }, @Body() body: unknown) {
     const parsed = CreateGroupSyncSchema.safeParse(body);

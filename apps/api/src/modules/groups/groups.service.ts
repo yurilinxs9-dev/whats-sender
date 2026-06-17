@@ -194,6 +194,16 @@ export class GroupsService {
     await this.prisma.groupSync.delete({ where: { id } });
   }
 
+  async listInstanceGroups(tenantId: string, instanceId: string) {
+    const instance = await this.prisma.instance.findFirst({
+      where: { id: instanceId, tenant_id: tenantId },
+    });
+    if (!instance) throw new NotFoundException('Instance not found');
+    const token = this.extractToken(instance.config);
+    if (!token) throw new BadRequestException('Instance has no UazAPI token. Reconnect it.');
+    return this.uazapi.listGroups(token);
+  }
+
   private async assertOwner(tenantId: string, id: string) {
     const sync = await this.prisma.groupSync.findFirst({ where: { id, tenant_id: tenantId } });
     if (!sync) throw new NotFoundException('GroupSync not found');

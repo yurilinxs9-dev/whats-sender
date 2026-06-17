@@ -5,6 +5,7 @@ import type {
   UazApiNumberCheck,
   UazApiInstanceStatus,
   UazApiCreateInstanceResult,
+  UazApiGroup,
   UazApiGroupParticipantsResult,
   UazApiAddParticipantsResult,
 } from './uazapi.types';
@@ -252,6 +253,26 @@ export class UazApiService {
   /* ------------------------------------------------------------------ */
   /*  Group endpoints (instance token)                                  */
   /* ------------------------------------------------------------------ */
+
+  // UazAPI: GET /group/list — returns all groups the instance participates in
+  async listGroups(instanceToken: string): Promise<UazApiGroup[]> {
+    const res = await this.request('/group/list', {
+      method: 'GET',
+      tokenType: 'instance',
+      token: instanceToken,
+    });
+    const data = (await res.json()) as Record<string, unknown>;
+    if (!res.ok) {
+      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      throw new Error(`UazAPI listGroups failed: ${msg}`);
+    }
+    const raw = Array.isArray(data) ? data : Array.isArray(data.groups) ? data.groups : [];
+    return (raw as Record<string, unknown>[]).map((g) => ({
+      id: g.id as string,
+      subject: (g.subject ?? g.name ?? g.title ?? '') as string,
+      size: typeof g.size === 'number' ? g.size : 0,
+    }));
+  }
 
   // UazAPI: GET /group/participants?groupId={jid}
   async getGroupParticipants(

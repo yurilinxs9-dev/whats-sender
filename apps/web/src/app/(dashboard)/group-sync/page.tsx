@@ -8,20 +8,17 @@ import {
   Pause,
   Download,
   UsersRound,
-  CheckCircle2,
-  XCircle,
-  Clock,
   Loader2,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +39,12 @@ interface Instance {
   id: string;
   nome: string;
   status: string;
+}
+
+interface WaGroup {
+  id: string;
+  subject: string;
+  size: number;
 }
 
 interface GroupSync {
@@ -75,11 +78,50 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.className}`}>{cfg.label}</span>;
 }
 
-function ProgressBar({ value, max, className }: { value: number; max: number; className?: string }) {
+function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max === 0 ? 0 : Math.min(100, Math.round((value / max) * 100));
   return (
-    <div className={`h-1.5 w-full rounded-full bg-zinc-800 ${className}`}>
+    <div className="h-1.5 w-full rounded-full bg-zinc-800">
       <div className="h-1.5 rounded-full bg-primary transition-all duration-500" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+// ─── Group select helper ──────────────────────────────
+function GroupSelect({
+  label,
+  value,
+  onChange,
+  groups,
+  loading,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  groups: WaGroup[];
+  loading: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {loading ? (
+        <Skeleton className="h-10 w-full" />
+      ) : groups.length === 0 ? (
+        <p className="text-xs text-text-secondary py-2">Selecione uma instância primeiro</p>
+      ) : (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione um grupo" />
+          </SelectTrigger>
+          <SelectContent>
+            {groups.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.subject} <span className="text-xs text-zinc-500 ml-1">({g.size} membros)</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
     </div>
   );
 }
@@ -92,6 +134,9 @@ export default function GroupSyncPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const [waGroups, setWaGroups] = useState<WaGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
 
   const [form, setForm] = useState({
     nome: '',
@@ -114,8 +159,8 @@ export default function GroupSyncPage() {
 
   const fetchInstances = useCallback(async () => {
     try {
-      const { data } = await api.get<{ instances: Instance[] }>('/instances');
-      setInstances(data.instances ?? data as unknown as Instance[]);
+      const { data } = await api.get<{ instances: Instance[] }>('/instances?limit=100');
+      setInstances(data.instances ?? []);
     } catch {
       // silent
     }
@@ -126,9 +171,34 @@ export default function GroupSyncPage() {
     fetchInstances();
   }, [fetchSyncs, fetchInstances]);
 
+  async function handleInstanceChange(instanceId: string) {
+    setForm((f) => ({ ...f, instance_id: instanceId, source_group_jid: '', dest_group_jid: '' }));
+    setWaGroups([]);
+    if (!instanceId) return;
+    setGroupsLoading(true);
+    try {
+      const { data } = await api.get<WaGroup[]>(`/group-sync/instances/${instanceId}/groups`);
+      setWaGroups(data);
+      if (data.length === 0) toast.warning('Nenhum grupo encontrado para esta instância');
+    } catch {
+      toast.error('Erro ao buscar grupos — verifique se a instância está conectada');
+    } finally {
+      setGroupsLoading(false);
+    }
+  }
+
+  async function handleRefreshGroups() {
+    if (!form.instance_id) return;
+    await handleInstanceChange(form.instance_id);
+  }
+
   async function handleCreate() {
     if (!form.nome || !form.source_group_jid || !form.dest_group_jid || !form.instance_id) {
       toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+    if (form.source_group_jid === form.dest_group_jid) {
+      toast.error('Grupo origem e destino não podem ser iguais');
       return;
     }
     setCreating(true);
@@ -140,6 +210,7 @@ export default function GroupSyncPage() {
       toast.success('Sincronização criada');
       setShowCreate(false);
       setForm({ nome: '', source_group_jid: '', dest_group_jid: '', instance_id: '', daily_add_cap: '50' });
+      setWaGroups([]);
       fetchSyncs();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -232,7 +303,6 @@ export default function GroupSyncPage() {
             const isExtracting = actionLoading === sync.id + ':extract';
             const isStarting   = actionLoading === sync.id + ':start';
             const isPausing    = actionLoading === sync.id + ':pause';
-            const isRunning    = sync.status === 'ADDING';
             const canExtract   = sync.status !== 'ADDING' && sync.status !== 'EXTRACTING';
             const canStart     = sync.extracted_count > 0 && sync.status !== 'ADDING' && sync.status !== 'EXTRACTING';
             const canPause     = sync.status === 'ADDING';
@@ -241,7 +311,6 @@ export default function GroupSyncPage() {
               <Card key={sync.id} className="bg-surface border-border">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-4">
-                    {/* Left info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-text-primary truncate">{sync.nome}</span>
@@ -249,17 +318,11 @@ export default function GroupSyncPage() {
                         <span className="text-xs text-text-secondary">{sync.instance.nome}</span>
                       </div>
 
-                      <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-text-secondary">
-                        <span className="truncate">Origem: <span className="font-mono text-zinc-400">{sync.source_group_jid}</span></span>
-                        <span className="truncate">Destino: <span className="font-mono text-zinc-400">{sync.dest_group_jid}</span></span>
-                      </div>
-
-                      {/* Progress */}
                       {sync.extracted_count > 0 && (
                         <div className="mt-3 space-y-1">
                           <div className="flex justify-between text-xs text-text-secondary">
-                            <span>{sync.added_count} adicionados de {sync.extracted_count}</span>
-                            <span className="text-danger">{sync.failed_count} falhas</span>
+                            <span>{sync.added_count} adicionados de {sync.extracted_count} extraídos</span>
+                            {sync.failed_count > 0 && <span className="text-danger">{sync.failed_count} falhas</span>}
                           </div>
                           <ProgressBar value={sync.added_count} max={sync.extracted_count} />
                         </div>
@@ -271,49 +334,26 @@ export default function GroupSyncPage() {
                       </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-2 shrink-0">
                       {canExtract && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleExtract(sync.id)}
-                          disabled={isExtracting}
-                          className="gap-1.5"
-                        >
+                        <Button size="sm" variant="outline" onClick={() => handleExtract(sync.id)} disabled={isExtracting} className="gap-1.5">
                           {isExtracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                           Extrair
                         </Button>
                       )}
                       {canStart && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleStart(sync.id)}
-                          disabled={isStarting}
-                          className="gap-1.5"
-                        >
+                        <Button size="sm" onClick={() => handleStart(sync.id)} disabled={isStarting} className="gap-1.5">
                           {isStarting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                           Iniciar
                         </Button>
                       )}
                       {canPause && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handlePause(sync.id)}
-                          disabled={isPausing}
-                          className="gap-1.5"
-                        >
+                        <Button size="sm" variant="outline" onClick={() => handlePause(sync.id)} disabled={isPausing} className="gap-1.5">
                           {isPausing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
                           Pausar
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDelete(sync.id, sync.nome)}
-                        className="text-danger hover:text-danger hover:bg-danger/10"
-                      >
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(sync.id, sync.nome)} className="text-danger hover:text-danger hover:bg-danger/10">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -326,8 +366,8 @@ export default function GroupSyncPage() {
       )}
 
       {/* Create Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="sm:max-w-md bg-surface border-border">
+      <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) { setWaGroups([]); setForm({ nome: '', source_group_jid: '', dest_group_jid: '', instance_id: '', daily_add_cap: '50' }); } }}>
+        <DialogContent className="sm:max-w-lg bg-surface border-border">
           <DialogHeader>
             <DialogTitle>Nova sincronização de grupo</DialogTitle>
           </DialogHeader>
@@ -335,65 +375,73 @@ export default function GroupSyncPage() {
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Nome</Label>
-              <Input
-                placeholder="Ex: Clientes → VIP"
-                value={form.nome}
-                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-              />
+              <Input placeholder="Ex: Clientes → VIP" value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
             </div>
+
             <div className="space-y-1.5">
               <Label>Instância</Label>
-              <Select value={form.instance_id} onValueChange={(v) => setForm((f) => ({ ...f, instance_id: v }))}>
+              <Select value={form.instance_id} onValueChange={handleInstanceChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma instância conectada" />
+                  <SelectValue placeholder="Selecione uma instância" />
                 </SelectTrigger>
                 <SelectContent>
-                  {instances.filter((i) => i.status === 'connected').map((i) => (
-                    <SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>
+                  {instances.length === 0 && (
+                    <SelectItem value="_none" disabled>Nenhuma instância encontrada</SelectItem>
+                  )}
+                  {instances.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.nome}
+                      <span className={`ml-2 text-xs ${i.status === 'connected' ? 'text-primary' : 'text-zinc-500'}`}>
+                        {i.status === 'connected' ? '● conectada' : '○ desconectada'}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {form.instance_id && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-text-secondary">{waGroups.length} grupos encontrados</span>
+                <Button variant="ghost" size="sm" onClick={handleRefreshGroups} disabled={groupsLoading} className="gap-1.5 h-7 text-xs">
+                  <RefreshCw className={`h-3 w-3 ${groupsLoading ? 'animate-spin' : ''}`} />
+                  Atualizar lista
+                </Button>
+              </div>
+            )}
+
+            <GroupSelect
+              label="Grupo origem (de onde extrair)"
+              value={form.source_group_jid}
+              onChange={(v) => setForm((f) => ({ ...f, source_group_jid: v }))}
+              groups={waGroups}
+              loading={groupsLoading}
+            />
+
+            <GroupSelect
+              label="Grupo destino (para onde adicionar)"
+              value={form.dest_group_jid}
+              onChange={(v) => setForm((f) => ({ ...f, dest_group_jid: v }))}
+              groups={waGroups.filter((g) => g.id !== form.source_group_jid)}
+              loading={groupsLoading}
+            />
+
             <div className="space-y-1.5">
-              <Label>JID do grupo origem</Label>
-              <Input
-                placeholder="120363000000000000@g.us"
-                value={form.source_group_jid}
-                onChange={(e) => setForm((f) => ({ ...f, source_group_jid: e.target.value }))}
-                className="font-mono text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>JID do grupo destino</Label>
-              <Input
-                placeholder="120363999999999999@g.us"
-                value={form.dest_group_jid}
-                onChange={(e) => setForm((f) => ({ ...f, dest_group_jid: e.target.value }))}
-                className="font-mono text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Cap diário de adições <span className="text-text-secondary">(máx. recomendado: 50)</span></Label>
-              <Input
-                type="number"
-                min={1}
-                max={200}
-                value={form.daily_add_cap}
-                onChange={(e) => setForm((f) => ({ ...f, daily_add_cap: e.target.value }))}
-              />
+              <Label>Cap diário de adições <span className="text-text-secondary text-xs">(recomendado ≤50)</span></Label>
+              <Input type="number" min={1} max={200} value={form.daily_add_cap} onChange={(e) => setForm((f) => ({ ...f, daily_add_cap: e.target.value }))} />
             </div>
 
             <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 flex gap-2">
               <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
               <p className="text-xs text-text-secondary">
-                As adições são feitas com delay de 30–90s entre cada membro e respeitam a janela horária configurada nas Configurações. Manter o cap diário em ≤50 reduz risco de ban.
+                Adições com delay 30–90s por membro, máx 3/min, respeitam janela horária. Cap diário ≤50 reduz risco de ban.
               </p>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={creating}>
+            <Button onClick={handleCreate} disabled={creating || !form.source_group_jid || !form.dest_group_jid}>
               {creating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Criar
             </Button>
