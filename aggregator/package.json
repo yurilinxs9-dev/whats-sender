@@ -1,0 +1,16 @@
+{
+  "name": "uazapi-webhook-aggregator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Recebe um webhook unico da UazAPI e distribui (fan-out) para todos os sistemas.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
