@@ -260,6 +260,11 @@ export class InstancesService {
     });
     if (!instance) throw new NotFoundException('Instancia nao encontrada');
 
+    const config = (instance.config as InstanceConfig) || {};
+    if (config.uazapi_token) {
+      await this.uazApi.logoutInstance(config.uazapi_token);
+    }
+
     const updated = await this.prisma.instance.update({
       where: { id },
       data: { status: 'disconnected' },

@@ -106,6 +106,18 @@ export class UazApiService {
     };
   }
 
+  async logoutInstance(instanceToken: string): Promise<void> {
+    try {
+      await this.request('/instance/logout', {
+        method: 'DELETE',
+        tokenType: 'instance',
+        token: instanceToken,
+      });
+    } catch (err) {
+      this.logger.warn(`UazAPI logout failed (ignored): ${(err as Error).message}`);
+    }
+  }
+
   async connectWithPairingCode(
     instanceToken: string,
     phoneNumber: string,
