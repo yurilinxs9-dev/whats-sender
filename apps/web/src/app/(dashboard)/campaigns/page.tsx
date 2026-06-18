@@ -298,8 +298,8 @@ export default function CampaignsPage() {
         ...(messageMode === 'template' ? { template_id: formTemplateId } : { inline_message: formInlineMessage }),
         contact_list_id: listId,
         instance_ids: formInstanceIds,
-        delay_min: parseInt(formDelayMin, 10),
-        delay_max: parseInt(formDelayMax, 10),
+        delay_min: parseInt(formDelayMin, 10) || 8,
+        delay_max: parseInt(formDelayMax, 10) || 20,
         scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : undefined,
         use_spin: formUseSpin,
         use_composing: formUseComposing,
@@ -351,8 +351,8 @@ export default function CampaignsPage() {
       setSubmitting(true);
       await api.patch(`/campaigns/${selectedCampaign.id}`, {
         nome: editNome,
-        delay_min: parseInt(editDelayMin, 10),
-        delay_max: parseInt(editDelayMax, 10),
+        delay_min: parseInt(editDelayMin, 10) || 8,
+        delay_max: parseInt(editDelayMax, 10) || 20,
         use_spin: editUseSpin,
         use_composing: editUseComposing,
       });
