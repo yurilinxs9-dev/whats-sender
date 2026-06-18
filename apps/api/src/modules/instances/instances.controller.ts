@@ -72,6 +72,22 @@ export class InstancesController {
     return this.instancesService.remove(id, req.user.tenantId);
   }
 
+  @Post('import')
+  @HttpCode(201)
+  async importByToken(
+    @Body() body: unknown,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    const { z } = await import('zod');
+    const schema = z.object({
+      nome: z.string().min(1),
+      uazapi_token: z.string().uuid(),
+      telefone: z.string().optional(),
+    });
+    const data = schema.parse(body);
+    return this.instancesService.importByToken(data, req.user.tenantId);
+  }
+
   @Post(':id/connect')
   @HttpCode(200)
   async connect(

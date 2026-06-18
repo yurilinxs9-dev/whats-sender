@@ -16,6 +16,7 @@ import {
   QrCode,
   Loader2,
   CheckCircle2,
+  KeyRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -128,10 +129,16 @@ export default function InstancesPage() {
 
   // Dialogs
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
+
+  // Import by token form
+  const [importNome, setImportNome] = useState('');
+  const [importToken, setImportToken] = useState('');
+  const [importTelefone, setImportTelefone] = useState('');
 
   // QR Code state
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -369,6 +376,29 @@ export default function InstancesPage() {
     setSelectedInstance(null);
   };
 
+  // ─── Import by Token ────────────────────────────
+  const handleImport = async () => {
+    try {
+      setSubmitting(true);
+      await api.post('/instances/import', {
+        nome: importNome,
+        uazapi_token: importToken.trim(),
+        telefone: importTelefone || undefined,
+      });
+      toast.success('Instancia importada com sucesso!');
+      setImportOpen(false);
+      setImportNome('');
+      setImportToken('');
+      setImportTelefone('');
+      fetchInstances();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } } };
+      toast.error(error.response?.data?.message ?? 'Token invalido ou instancia nao encontrada');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ─── Render ─────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -378,10 +408,16 @@ export default function InstancesPage() {
           <Smartphone className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold text-text-primary">Instancias WhatsApp</h1>
         </div>
-        <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nova Instancia
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <KeyRound className="mr-2 h-4 w-4" />
+            Importar por Token
+          </Button>
+          <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Instancia
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -783,6 +819,75 @@ export default function InstancesPage() {
             </Button>
             <Button onClick={handleEdit} disabled={submitting || !formNome.trim()}>
               {submitting ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Import by Token Dialog ──────────────── */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Importar Instancia por Token
+            </DialogTitle>
+            <DialogDescription>
+              Use o token de uma instancia ja existente na UazAPI. Util para numeros ja conectados em outro sistema.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="import-nome">Nome da Instancia *</Label>
+              <Input
+                id="import-nome"
+                placeholder="Ex: numero-alvaro"
+                value={importNome}
+                onChange={(e) => setImportNome(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="import-token">Token UazAPI *</Label>
+              <Input
+                id="import-token"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={importToken}
+                onChange={(e) => setImportToken(e.target.value)}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-text-secondary">
+                Painel UazAPI → clica na instancia → copia o Instance Token
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="import-telefone">Telefone (opcional)</Label>
+              <Input
+                id="import-telefone"
+                placeholder="5511999999999"
+                value={importTelefone}
+                onChange={(e) => setImportTelefone(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={submitting}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleImport}
+              disabled={submitting || !importNome.trim() || !importToken.trim()}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Importando...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Importar
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

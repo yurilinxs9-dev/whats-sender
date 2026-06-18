@@ -269,6 +269,35 @@ export class InstancesService {
     return updated;
   }
 
+  async importByToken(
+    data: { nome: string; uazapi_token: string; telefone?: string },
+    tenantId: string,
+  ) {
+    const existing = await this.prisma.instance.findUnique({
+      where: { nome: data.nome },
+    });
+    if (existing) throw new ConflictException('Ja existe uma instancia com este nome');
+
+    // Validate token by checking status on UazAPI
+    const status = await this.uazApi.getInstanceStatus(data.uazapi_token);
+
+    const instance = await this.prisma.instance.create({
+      data: {
+        nome: data.nome,
+        telefone: data.telefone || status.owner || null,
+        status: status.state || 'disconnected',
+        config: {
+          uazapi_token: data.uazapi_token,
+          uazapi_instance_name: data.nome,
+        },
+        tenant_id: tenantId,
+      },
+    });
+
+    this.gateway.emitInstanceStatusChanged(instance.nome, instance.status, tenantId);
+    return instance;
+  }
+
   getUazApiToken(instance: { config: unknown }): string | null {
     const config = (instance.config as InstanceConfig) || {};
     return config.uazapi_token || null;
