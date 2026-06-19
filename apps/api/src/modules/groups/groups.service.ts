@@ -45,57 +45,62 @@ export class GroupsService {
         status: 'PENDING',
       },
     });
-    // Roda a extração já na criação
-    return this.runExtraction(tenantId, extraction.id);
+    // Dispara extração em background e retorna já (grupos grandes demoram)
+    return this.triggerExtraction(tenantId, extraction.id);
   }
 
-  async runExtraction(tenantId: string, id: string) {
+  // Marca EXTRACTING e roda em background — não bloqueia o request HTTP.
+  async triggerExtraction(tenantId: string, id: string) {
     const extraction = await this.assertExtraction(tenantId, id);
+    if (extraction.status === 'EXTRACTING') {
+      throw new BadRequestException('Extração já está em andamento');
+    }
+    const updated = await this.prisma.groupExtraction.update({
+      where: { id },
+      data: { status: 'EXTRACTING', error: null },
+    });
+    this.gateway.emitExtractionProgress(id, { status: 'EXTRACTING' }, tenantId);
+    void this.runExtraction(tenantId, id).catch(async (error) => {
+      this.logger.error(`Extração ${id} falhou: ${(error as Error).message}`);
+      await this.prisma.groupExtraction
+        .update({ where: { id }, data: { status: 'FAILED', error: (error as Error).message } })
+        .catch(() => undefined);
+      this.gateway.emitExtractionProgress(id, { status: 'FAILED' }, tenantId);
+    });
+    return updated;
+  }
+
+  private async runExtraction(tenantId: string, id: string) {
+    const extraction = await this.prisma.groupExtraction.findUnique({ where: { id } });
+    if (!extraction) return;
 
     const instance = await this.prisma.instance.findUnique({ where: { id: extraction.instance_id } });
     const token = this.extractToken(instance?.config);
-    if (!token) throw new BadRequestException('Instância sem token UazAPI. Reconecte.');
+    if (!token) throw new Error('Instância sem token UazAPI. Reconecte.');
 
-    await this.prisma.groupExtraction.update({ where: { id }, data: { status: 'EXTRACTING', error: null } });
-    this.gateway.emitExtractionProgress(id, { status: 'EXTRACTING' }, tenantId);
+    const result = await this.uazapi.getGroupParticipants(token, extraction.source_group_jid);
 
-    try {
-      const result = await this.uazapi.getGroupParticipants(token, extraction.source_group_jid);
+    // Refresh total: limpa e recria (1 query, sem estourar pool com 1000+ upserts)
+    await this.prisma.extractedMember.deleteMany({ where: { extraction_id: id } });
+    await this.prisma.extractedMember.createMany({
+      data: result.participants
+        .filter((p) => p.id)
+        .map((p) => ({
+          extraction_id: id,
+          jid: p.id,
+          phone: p.id.replace(/@.*$/, ''),
+          is_admin: p.admin === 'admin' || p.admin === 'superadmin',
+        })),
+      skipDuplicates: true,
+    });
 
-      // Upsert dos membros (idempotente em re-extração)
-      await Promise.all(
-        result.participants.map((p) => {
-          const jid = p.id;
-          const phone = jid.replace(/@.*$/, '');
-          return this.prisma.extractedMember.upsert({
-            where: { extraction_id_jid: { extraction_id: id, jid } },
-            create: {
-              extraction_id: id,
-              jid,
-              phone,
-              is_admin: p.admin === 'admin' || p.admin === 'superadmin',
-            },
-            update: { is_admin: p.admin === 'admin' || p.admin === 'superadmin' },
-          });
-        }),
-      );
-
-      const total = await this.prisma.extractedMember.count({ where: { extraction_id: id } });
-      const updated = await this.prisma.groupExtraction.update({
-        where: { id },
-        data: { status: 'DONE', total_members: total, extracted_at: new Date() },
-      });
-      this.gateway.emitExtractionProgress(id, { status: 'DONE', total }, tenantId);
-      this.logger.log(`Extração ${id}: ${total} membros`);
-      return updated;
-    } catch (error) {
-      await this.prisma.groupExtraction.update({
-        where: { id },
-        data: { status: 'FAILED', error: (error as Error).message },
-      });
-      this.gateway.emitExtractionProgress(id, { status: 'FAILED' }, tenantId);
-      throw error;
-    }
+    const total = await this.prisma.extractedMember.count({ where: { extraction_id: id } });
+    await this.prisma.groupExtraction.update({
+      where: { id },
+      data: { status: 'DONE', total_members: total, extracted_at: new Date() },
+    });
+    this.gateway.emitExtractionProgress(id, { status: 'DONE', total }, tenantId);
+    this.logger.log(`Extração ${id}: ${total} membros`);
   }
 
   listExtractions(tenantId: string) {

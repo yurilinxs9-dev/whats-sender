@@ -294,12 +294,13 @@ export class UazApiService {
     });
   }
 
-  // UazAPI: GET /group/participants?groupId={jid}
+  // Não existe /group/participants nesta UazAPI (404). /group/list?force=true
+  // retorna TODOS os grupos com Participants[] completos (testado p/ grupos de 1800+).
   async getGroupParticipants(
     instanceToken: string,
     groupJid: string,
   ): Promise<UazApiGroupParticipantsResult> {
-    const res = await this.request(`/group/participants?groupId=${encodeURIComponent(groupJid)}`, {
+    const res = await this.request('/group/list?force=true', {
       method: 'GET',
       tokenType: 'instance',
       token: instanceToken,
@@ -309,15 +310,12 @@ export class UazApiService {
       const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
       throw new Error(`UazAPI getGroupParticipants failed: ${msg}`);
     }
-    // UazAPI manda PascalCase: Participants[] com JID/PhoneNumber/IsAdmin/IsSuperAdmin.
-    const group = (data.group ?? {}) as Record<string, unknown>;
-    const raw = Array.isArray(data.participants)
-      ? data.participants
-      : Array.isArray(data.Participants)
-        ? data.Participants
-        : Array.isArray(group.Participants)
-          ? group.Participants
-          : [];
+    const groups = (Array.isArray(data) ? data : Array.isArray(data.groups) ? data.groups : []) as Record<string, unknown>[];
+    const group = groups.find((g) => (g.JID ?? g.id) === groupJid);
+    if (!group) {
+      throw new Error(`Grupo ${groupJid} não encontrado na lista da instância`);
+    }
+    const raw = Array.isArray(group.Participants) ? group.Participants : [];
     return {
       participants: (raw as Record<string, unknown>[]).map((p) => {
         const phone = typeof p.PhoneNumber === 'string' ? p.PhoneNumber.replace(/@.*$/, '') : '';

@@ -53,7 +53,7 @@ export class GroupsController {
   @Post('extractions/:id/re-extract')
   @HttpCode(HttpStatus.OK)
   reExtract(@Req() req: Req, @Param('id') id: string) {
-    return this.groupsService.runExtraction(req.user.tenantId, id);
+    return this.groupsService.triggerExtraction(req.user.tenantId, id);
   }
 
   @Delete('extractions/:id')

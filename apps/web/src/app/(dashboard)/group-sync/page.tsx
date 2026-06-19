@@ -212,6 +212,14 @@ function ExtractionsTab() {
   }, []);
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
+  // Poll enquanto houver extração em andamento (atualiza status/contagem)
+  useEffect(() => {
+    const running = items.some((e) => e.status === 'EXTRACTING' || e.status === 'PENDING');
+    if (!running) return;
+    const t = setTimeout(() => { fetchItems(); }, 3000);
+    return () => clearTimeout(t);
+  }, [items, fetchItems]);
+
   async function onInstance(id: string) {
     setForm((f) => ({ ...f, instance_id: id, source_group_jid: '' }));
     await loadGroups(id);
@@ -227,7 +235,7 @@ function ExtractionsTab() {
         source_group_jid: form.source_group_jid,
         source_group_name: g?.subject ?? '',
       });
-      toast.success('Extração concluída');
+      toast.success('Extração iniciada — acompanhe o progresso');
       setShow(false);
       setForm({ nome: '', instance_id: '', source_group_jid: '' });
       setWaGroups([]);
@@ -277,6 +285,7 @@ function ExtractionsTab() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-text-primary truncate">{e.nome}</span>
                         <Badge map={EXTRACTION_STATUS} status={e.status} />
+                        {(e.status === 'EXTRACTING' || e.status === 'PENDING') && <Loader2 className="h-3.5 w-3.5 animate-spin text-warning" />}
                         <span className="text-xs text-text-secondary">{e.instance.nome}</span>
                       </div>
                       <p className="text-xs text-text-secondary mt-1 truncate">
@@ -401,6 +410,14 @@ function AddJobsTab() {
     catch { /* silent */ }
   }, []);
   useEffect(() => { fetchItems(); fetchExtractions(); }, [fetchItems, fetchExtractions]);
+
+  // Poll enquanto houver job rodando (progresso ao vivo)
+  useEffect(() => {
+    const running = items.some((j) => j.status === 'RUNNING');
+    if (!running) return;
+    const t = setTimeout(() => { fetchItems(); }, 4000);
+    return () => clearTimeout(t);
+  }, [items, fetchItems]);
 
   async function onDestInstance(id: string) {
     setForm((f) => ({ ...f, dest_instance_id: id, dest_group_jid: '' }));
