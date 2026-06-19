@@ -279,11 +279,19 @@ export class UazApiService {
       throw new Error(`UazAPI listGroups failed: ${msg}`);
     }
     const raw = Array.isArray(data) ? data : Array.isArray(data.groups) ? data.groups : [];
-    return (raw as Record<string, unknown>[]).map((g) => ({
-      id: g.id as string,
-      subject: (g.subject ?? g.name ?? g.title ?? '') as string,
-      size: typeof g.size === 'number' ? g.size : 0,
-    }));
+    // UazAPI retorna PascalCase: JID, Name, Participants[]. ParticipantCount vem 0
+    // (não confiável) → contar pelo array Participants. Mantém fallbacks p/ outras versões.
+    return (raw as Record<string, unknown>[]).map((g) => {
+      const participants = Array.isArray(g.Participants) ? g.Participants : [];
+      const size = participants.length
+        || (typeof g.ParticipantCount === 'number' ? g.ParticipantCount : 0)
+        || (typeof g.size === 'number' ? g.size : 0);
+      return {
+        id: (g.JID ?? g.id ?? '') as string,
+        subject: (g.Name ?? g.subject ?? g.name ?? g.title ?? '') as string,
+        size,
+      };
+    });
   }
 
   // UazAPI: GET /group/participants?groupId={jid}
@@ -301,12 +309,28 @@ export class UazApiService {
       const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
       throw new Error(`UazAPI getGroupParticipants failed: ${msg}`);
     }
-    const raw = Array.isArray(data.participants) ? data.participants : [];
+    // UazAPI manda PascalCase: Participants[] com JID/PhoneNumber/IsAdmin/IsSuperAdmin.
+    const group = (data.group ?? {}) as Record<string, unknown>;
+    const raw = Array.isArray(data.participants)
+      ? data.participants
+      : Array.isArray(data.Participants)
+        ? data.Participants
+        : Array.isArray(group.Participants)
+          ? group.Participants
+          : [];
     return {
-      participants: (raw as Record<string, unknown>[]).map((p) => ({
-        id: p.id as string,
-        admin: typeof p.admin === 'string' ? p.admin : null,
-      })),
+      participants: (raw as Record<string, unknown>[]).map((p) => {
+        const phone = typeof p.PhoneNumber === 'string' ? p.PhoneNumber.replace(/@.*$/, '') : '';
+        const id = (phone || p.JID || p.LID || p.id || '') as string;
+        const admin = p.IsSuperAdmin
+          ? 'superadmin'
+          : p.IsAdmin
+            ? 'admin'
+            : typeof p.admin === 'string'
+              ? p.admin
+              : null;
+        return { id, admin };
+      }),
     };
   }
 
