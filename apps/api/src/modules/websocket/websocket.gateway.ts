@@ -71,11 +71,15 @@ export class SenderGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.toTenant(tenantId).emit('health:alert', data);
   }
 
-  emitGroupSyncProgress(syncId: string, data: Record<string, unknown>, tenantId?: string) {
-    this.toTenant(tenantId).emit('group-sync:progress', { syncId, ...data });
+  emitExtractionProgress(extractionId: string, data: Record<string, unknown>, tenantId?: string) {
+    this.toTenant(tenantId).emit('extraction:progress', { extractionId, ...data });
   }
 
-  emitGroupSyncCompleted(syncId: string, tenantId?: string) {
-    this.toTenant(tenantId).emit('group-sync:completed', { syncId });
+  emitAddJobProgress(jobId: string, data: Record<string, unknown>, tenantId?: string) {
+    this.toTenant(tenantId).emit('add-job:progress', { jobId, ...data });
+  }
+
+  emitAddJobCompleted(jobId: string, tenantId?: string) {
+    this.toTenant(tenantId).emit('add-job:completed', { jobId });
   }
 }

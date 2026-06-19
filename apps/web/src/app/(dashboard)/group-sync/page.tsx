@@ -11,6 +11,10 @@ import {
   Loader2,
   AlertTriangle,
   RefreshCw,
+  FileBarChart,
+  CheckCircle2,
+  XCircle,
+  Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -19,6 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -35,49 +40,75 @@ import {
 } from '@/components/ui/select';
 
 // ─── Types ──────────────────────────────────────────
-interface Instance {
-  id: string;
-  nome: string;
-  status: string;
-}
+interface Instance { id: string; nome: string; status: string }
+interface WaGroup { id: string; subject: string; size: number }
 
-interface WaGroup {
-  id: string;
-  subject: string;
-  size: number;
-}
-
-interface GroupSync {
+interface Extraction {
   id: string;
   nome: string;
   source_group_jid: string;
-  dest_group_jid: string;
-  instance_id: string;
-  instance: { nome: string; status: string };
+  source_group_name: string;
+  total_members: number;
   status: string;
-  extracted_count: number;
+  error?: string | null;
+  extracted_at?: string | null;
+  created_at: string;
+  instance: { nome: string; status: string };
+  _count?: { members: number; add_jobs: number };
+}
+interface ExtractedMember { id: string; jid: string; phone: string; display_name?: string | null; is_admin: boolean }
+interface ExtractionDetail extends Extraction { members: ExtractedMember[] }
+
+interface AddJob {
+  id: string;
+  nome: string;
+  dest_group_jid: string;
+  dest_group_name: string;
+  per_run_limit: number;
+  daily_add_cap: number;
+  delay_min_s: number;
+  delay_max_s: number;
+  send_invite_on_fail: boolean;
   added_count: number;
   failed_count: number;
-  daily_add_cap: number;
+  skipped_count: number;
   added_today: number;
+  status: string;
   created_at: string;
+  dest_instance: { nome: string; status: string };
+  extraction: { nome: string; source_group_name: string };
+  _count?: { targets: number };
 }
+interface AddTarget { id: string; member_jid: string; phone: string; status: string; attempts: number; error?: string | null; added_at?: string | null }
+interface AddJobDetail extends AddJob { targets: AddTarget[] }
 
 // ─── Status config ───────────────────────────────────
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  IDLE:        { label: 'Aguardando',  className: 'bg-zinc-800 text-zinc-300' },
-  EXTRACTING:  { label: 'Extraindo',   className: 'bg-warning/20 text-warning' },
-  ADDING:      { label: 'Adicionando', className: 'bg-primary/20 text-primary' },
-  COMPLETED:   { label: 'Concluído',   className: 'bg-green-900/30 text-green-400' },
-  FAILED:      { label: 'Erro',        className: 'bg-danger/20 text-danger' },
-  PAUSED:      { label: 'Pausado',     className: 'bg-zinc-700 text-zinc-400' },
+const EXTRACTION_STATUS: Record<string, { label: string; cls: string }> = {
+  PENDING:    { label: 'Aguardando', cls: 'bg-zinc-800 text-zinc-300' },
+  EXTRACTING: { label: 'Extraindo',  cls: 'bg-warning/20 text-warning' },
+  DONE:       { label: 'Pronta',     cls: 'bg-green-900/30 text-green-400' },
+  FAILED:     { label: 'Erro',       cls: 'bg-danger/20 text-danger' },
+};
+const JOB_STATUS: Record<string, { label: string; cls: string }> = {
+  IDLE:      { label: 'Aguardando',  cls: 'bg-zinc-800 text-zinc-300' },
+  RUNNING:   { label: 'Adicionando', cls: 'bg-primary/20 text-primary' },
+  PAUSED:    { label: 'Pausado',     cls: 'bg-zinc-700 text-zinc-400' },
+  COMPLETED: { label: 'Concluído',   cls: 'bg-green-900/30 text-green-400' },
+  FAILED:    { label: 'Erro',        cls: 'bg-danger/20 text-danger' },
+};
+const TARGET_STATUS: Record<string, { label: string; cls: string }> = {
+  PENDING:    { label: 'Pendente',  cls: 'text-zinc-400' },
+  PROCESSING: { label: 'Em curso',  cls: 'text-warning' },
+  DONE:       { label: 'Adicionado', cls: 'text-green-400' },
+  FAILED:     { label: 'Falhou',    cls: 'text-danger' },
+  SKIPPED:    { label: 'Pulado',    cls: 'text-zinc-500' },
+  INVITED:    { label: 'Convidado', cls: 'text-blue-400' },
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? { label: status, className: 'bg-zinc-800 text-zinc-300' };
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.className}`}>{cfg.label}</span>;
+function Badge({ map, status }: { map: Record<string, { label: string; cls: string }>; status: string }) {
+  const cfg = map[status] ?? { label: status, cls: 'bg-zinc-800 text-zinc-300' };
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.cls}`}>{cfg.label}</span>;
 }
-
 function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max === 0 ? 0 : Math.min(100, Math.round((value / max) * 100));
   return (
@@ -86,368 +117,558 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
     </div>
   );
 }
-
-// ─── Group select helper ──────────────────────────────
-function GroupSelect({
-  label,
-  value,
-  onChange,
-  groups,
-  loading,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  groups: WaGroup[];
-  loading: boolean;
+function errMsg(e: unknown, fallback: string) {
+  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
+}
+function GroupSelect({ label, value, onChange, groups, loading }: {
+  label: string; value: string; onChange: (v: string) => void; groups: WaGroup[]; loading: boolean;
 }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      {loading ? (
-        <Skeleton className="h-10 w-full" />
-      ) : groups.length === 0 ? (
-        <p className="text-xs text-text-secondary py-2">Selecione uma instância primeiro</p>
-      ) : (
-        <Select value={value} onValueChange={onChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione um grupo" />
-          </SelectTrigger>
-          <SelectContent>
-            {groups.map((g) => (
-              <SelectItem key={g.id} value={g.id}>
-                {g.subject} <span className="text-xs text-zinc-500 ml-1">({g.size} membros)</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+      {loading ? <Skeleton className="h-10 w-full" />
+        : groups.length === 0 ? <p className="text-xs text-text-secondary py-2">Selecione uma instância primeiro</p>
+        : (
+          <Select value={value} onValueChange={onChange}>
+            <SelectTrigger><SelectValue placeholder="Selecione um grupo" /></SelectTrigger>
+            <SelectContent>
+              {groups.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.subject || '(sem nome)'} <span className="text-xs text-zinc-500 ml-1">({g.size} membros)</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
     </div>
   );
 }
 
-// ─── Main Page ───────────────────────────────────────
-export default function GroupSyncPage() {
-  const [syncs, setSyncs] = useState<GroupSync[]>([]);
-  const [instances, setInstances] = useState<Instance[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+// ═══════════════════════════════════════════════════════
+export default function GroupsPage() {
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary">Grupos</h1>
+        <p className="text-sm text-text-secondary mt-0.5">Extraia membros uma vez e reaproveite em várias adições</p>
+      </div>
+      <Tabs defaultValue="extractions">
+        <TabsList>
+          <TabsTrigger value="extractions">Extrações</TabsTrigger>
+          <TabsTrigger value="addjobs">Adições</TabsTrigger>
+        </TabsList>
+        <TabsContent value="extractions"><ExtractionsTab /></TabsContent>
+        <TabsContent value="addjobs"><AddJobsTab /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
 
+// ─── helper: carregar instâncias + grupos ────────────
+function useInstancesAndGroups() {
+  const [instances, setInstances] = useState<Instance[]>([]);
   const [waGroups, setWaGroups] = useState<WaGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
-
-  const [form, setForm] = useState({
-    nome: '',
-    source_group_jid: '',
-    dest_group_jid: '',
-    instance_id: '',
-    daily_add_cap: '50',
-  });
-
-  const fetchSyncs = useCallback(async () => {
-    try {
-      const { data } = await api.get<GroupSync[]>('/group-sync');
-      setSyncs(data);
-    } catch {
-      toast.error('Erro ao carregar sincronizações');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const fetchInstances = useCallback(async () => {
     try {
       const { data } = await api.get<{ instances: Instance[] }>('/instances?limit=100');
       setInstances(data.instances ?? []);
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, []);
+  useEffect(() => { fetchInstances(); }, [fetchInstances]);
 
-  useEffect(() => {
-    fetchSyncs();
-    fetchInstances();
-  }, [fetchSyncs, fetchInstances]);
-
-  async function handleInstanceChange(instanceId: string) {
-    setForm((f) => ({ ...f, instance_id: instanceId, source_group_jid: '', dest_group_jid: '' }));
+  const loadGroups = useCallback(async (instanceId: string) => {
     setWaGroups([]);
     if (!instanceId) return;
     setGroupsLoading(true);
     try {
-      const { data } = await api.get<WaGroup[]>(`/group-sync/instances/${instanceId}/groups`);
+      const { data } = await api.get<WaGroup[]>(`/groups/instances/${instanceId}/groups`);
       setWaGroups(data);
       if (data.length === 0) toast.warning('Nenhum grupo encontrado para esta instância');
     } catch {
       toast.error('Erro ao buscar grupos — verifique se a instância está conectada');
-    } finally {
-      setGroupsLoading(false);
-    }
-  }
+    } finally { setGroupsLoading(false); }
+  }, []);
 
-  async function handleRefreshGroups() {
-    if (!form.instance_id) return;
-    await handleInstanceChange(form.instance_id);
-  }
+  return { instances, waGroups, groupsLoading, loadGroups, setWaGroups };
+}
 
-  async function handleCreate() {
-    if (!form.nome || !form.source_group_jid || !form.dest_group_jid || !form.instance_id) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
-    }
-    if (form.source_group_jid === form.dest_group_jid) {
-      toast.error('Grupo origem e destino não podem ser iguais');
-      return;
-    }
+// ═══════════════ Aba EXTRAÇÕES ═══════════════
+function ExtractionsTab() {
+  const [items, setItems] = useState<Extraction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [show, setShow] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [report, setReport] = useState<ExtractionDetail | null>(null);
+  const { instances, waGroups, groupsLoading, loadGroups, setWaGroups } = useInstancesAndGroups();
+  const [form, setForm] = useState({ nome: '', instance_id: '', source_group_jid: '' });
+
+  const fetchItems = useCallback(async () => {
+    try { const { data } = await api.get<Extraction[]>('/groups/extractions'); setItems(data); }
+    catch { toast.error('Erro ao carregar extrações'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  async function onInstance(id: string) {
+    setForm((f) => ({ ...f, instance_id: id, source_group_jid: '' }));
+    await loadGroups(id);
+  }
+  async function create() {
+    if (!form.nome || !form.instance_id || !form.source_group_jid) { toast.error('Preencha todos os campos'); return; }
+    const g = waGroups.find((x) => x.id === form.source_group_jid);
     setCreating(true);
     try {
-      await api.post('/group-sync', {
-        ...form,
-        daily_add_cap: Number(form.daily_add_cap),
+      await api.post('/groups/extractions', {
+        nome: form.nome,
+        instance_id: form.instance_id,
+        source_group_jid: form.source_group_jid,
+        source_group_name: g?.subject ?? '',
       });
-      toast.success('Sincronização criada');
-      setShowCreate(false);
-      setForm({ nome: '', source_group_jid: '', dest_group_jid: '', instance_id: '', daily_add_cap: '50' });
+      toast.success('Extração concluída');
+      setShow(false);
+      setForm({ nome: '', instance_id: '', source_group_jid: '' });
       setWaGroups([]);
-      fetchSyncs();
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? 'Erro ao criar sincronização');
-    } finally {
-      setCreating(false);
-    }
+      fetchItems();
+    } catch (e) { toast.error(errMsg(e, 'Erro ao extrair')); }
+    finally { setCreating(false); }
   }
-
-  async function handleExtract(id: string) {
-    setActionLoading(id + ':extract');
-    try {
-      await api.post(`/group-sync/${id}/extract`);
-      toast.success('Extração iniciada');
-      fetchSyncs();
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? 'Erro ao extrair participantes');
-    } finally {
-      setActionLoading(null);
-    }
+  async function reExtract(id: string) {
+    setBusy(id + ':re');
+    try { await api.post(`/groups/extractions/${id}/re-extract`); toast.success('Re-extraído'); fetchItems(); }
+    catch (e) { toast.error(errMsg(e, 'Erro ao re-extrair')); }
+    finally { setBusy(null); }
   }
-
-  async function handleStart(id: string) {
-    setActionLoading(id + ':start');
-    try {
-      const { data } = await api.post<{ queued: number }>(`/group-sync/${id}/start`);
-      toast.success(`${data.queued} adições enfileiradas`);
-      fetchSyncs();
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? 'Erro ao iniciar adição');
-    } finally {
-      setActionLoading(null);
-    }
+  async function del(id: string, nome: string) {
+    if (!confirm(`Deletar extração "${nome}"? Jobs de adição que a usam ficam órfãos.`)) return;
+    try { await api.delete(`/groups/extractions/${id}`); toast.success('Deletada'); setItems((p) => p.filter((x) => x.id !== id)); }
+    catch (e) { toast.error(errMsg(e, 'Erro ao deletar')); }
   }
-
-  async function handlePause(id: string) {
-    setActionLoading(id + ':pause');
-    try {
-      await api.post(`/group-sync/${id}/pause`);
-      toast.success('Pausado');
-      fetchSyncs();
-    } catch {
-      toast.error('Erro ao pausar');
-    } finally {
-      setActionLoading(null);
-    }
+  async function openReport(id: string) {
+    try { const { data } = await api.get<ExtractionDetail>(`/groups/extractions/${id}`); setReport(data); }
+    catch { toast.error('Erro ao carregar relatório'); }
   }
-
-  async function handleDelete(id: string, nome: string) {
-    if (!confirm(`Deletar "${nome}"?`)) return;
-    try {
-      await api.delete(`/group-sync/${id}`);
-      toast.success('Deletado');
-      setSyncs((prev) => prev.filter((s) => s.id !== id));
-    } catch {
-      toast.error('Erro ao deletar');
-    }
+  function exportCsv(d: ExtractionDetail) {
+    const rows = [['phone', 'jid', 'admin'], ...d.members.map((m) => [m.phone, m.jid, m.is_admin ? 'sim' : 'nao'])];
+    downloadCsv(rows, `extracao-${d.nome}.csv`);
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Grupos</h1>
-          <p className="text-sm text-text-secondary mt-0.5">Extraia e adicione participantes entre grupos do WhatsApp</p>
-        </div>
-        <Button onClick={() => setShowCreate(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nova sincronização
-        </Button>
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setShow(true)} className="gap-2"><Plus className="h-4 w-4" />Nova extração</Button>
       </div>
 
-      {/* List */}
-      {loading ? (
-        <div className="grid gap-4">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-36 w-full rounded-xl" />)}
-        </div>
-      ) : syncs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-text-secondary gap-3">
-          <UsersRound className="h-10 w-10 opacity-30" />
-          <p className="text-sm">Nenhuma sincronização criada</p>
-          <Button variant="outline" size="sm" onClick={() => setShowCreate(true)}>Criar primeira</Button>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {syncs.map((sync) => {
-            const isExtracting = actionLoading === sync.id + ':extract';
-            const isStarting   = actionLoading === sync.id + ':start';
-            const isPausing    = actionLoading === sync.id + ':pause';
-            const canExtract   = sync.status !== 'ADDING' && sync.status !== 'EXTRACTING';
-            const canStart     = sync.extracted_count > 0 && sync.status !== 'ADDING' && sync.status !== 'EXTRACTING';
-            const canPause     = sync.status === 'ADDING';
-
-            return (
-              <Card key={sync.id} className="bg-surface border-border">
+      {loading ? <div className="grid gap-4">{[1, 2].map((i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
+        : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-text-secondary gap-3">
+            <UsersRound className="h-10 w-10 opacity-30" />
+            <p className="text-sm">Nenhuma extração ainda</p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {items.map((e) => (
+              <Card key={e.id} className="bg-surface border-border">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-text-primary truncate">{sync.nome}</span>
-                        <StatusBadge status={sync.status} />
-                        <span className="text-xs text-text-secondary">{sync.instance.nome}</span>
+                        <span className="font-semibold text-text-primary truncate">{e.nome}</span>
+                        <Badge map={EXTRACTION_STATUS} status={e.status} />
+                        <span className="text-xs text-text-secondary">{e.instance.nome}</span>
                       </div>
-
-                      {sync.extracted_count > 0 && (
-                        <div className="mt-3 space-y-1">
-                          <div className="flex justify-between text-xs text-text-secondary">
-                            <span>{sync.added_count} adicionados de {sync.extracted_count} extraídos</span>
-                            {sync.failed_count > 0 && <span className="text-danger">{sync.failed_count} falhas</span>}
-                          </div>
-                          <ProgressBar value={sync.added_count} max={sync.extracted_count} />
-                        </div>
-                      )}
-
+                      <p className="text-xs text-text-secondary mt-1 truncate">
+                        Origem: {e.source_group_name || e.source_group_jid}
+                      </p>
                       <div className="mt-2 flex gap-4 text-xs text-text-secondary">
-                        <span>Cap diário: {sync.daily_add_cap}</span>
-                        <span>Hoje: {sync.added_today}</span>
+                        <span className="text-text-primary font-medium">{e.total_members} membros</span>
+                        {e._count && <span>{e._count.add_jobs} job(s) usando</span>}
+                        {e.extracted_at && <span>em {new Date(e.extracted_at).toLocaleString('pt-BR')}</span>}
                       </div>
+                      {e.status === 'FAILED' && e.error && <p className="text-xs text-danger mt-1">{e.error}</p>}
                     </div>
-
                     <div className="flex items-center gap-2 shrink-0">
-                      {canExtract && (
-                        <Button size="sm" variant="outline" onClick={() => handleExtract(sync.id)} disabled={isExtracting} className="gap-1.5">
-                          {isExtracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                          Extrair
-                        </Button>
-                      )}
-                      {canStart && (
-                        <Button size="sm" onClick={() => handleStart(sync.id)} disabled={isStarting} className="gap-1.5">
-                          {isStarting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                          Iniciar
-                        </Button>
-                      )}
-                      {canPause && (
-                        <Button size="sm" variant="outline" onClick={() => handlePause(sync.id)} disabled={isPausing} className="gap-1.5">
-                          {isPausing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
-                          Pausar
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(sync.id, sync.nome)} className="text-danger hover:text-danger hover:bg-danger/10">
+                      <Button size="sm" variant="outline" onClick={() => openReport(e.id)} className="gap-1.5" disabled={e.total_members === 0}>
+                        <FileBarChart className="h-3 w-3" />Relatório
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => reExtract(e.id)} disabled={busy === e.id + ':re'} className="gap-1.5">
+                        {busy === e.id + ':re' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}Re-extrair
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => del(e.id, e.nome)} className="text-danger hover:text-danger hover:bg-danger/10">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      {/* Create Dialog */}
-      <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) { setWaGroups([]); setForm({ nome: '', source_group_jid: '', dest_group_jid: '', instance_id: '', daily_add_cap: '50' }); } }}>
+      {/* Dialog criar extração */}
+      <Dialog open={show} onOpenChange={(o) => { setShow(o); if (!o) { setWaGroups([]); setForm({ nome: '', instance_id: '', source_group_jid: '' }); } }}>
         <DialogContent className="sm:max-w-lg bg-surface border-border">
-          <DialogHeader>
-            <DialogTitle>Nova sincronização de grupo</DialogTitle>
-          </DialogHeader>
-
+          <DialogHeader><DialogTitle>Nova extração</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Nome</Label>
-              <Input placeholder="Ex: Clientes → VIP" value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
+              <Input placeholder="Ex: Grupo Distribuidora — base" value={form.nome} onChange={(ev) => setForm((f) => ({ ...f, nome: ev.target.value }))} />
             </div>
-
             <div className="space-y-1.5">
               <Label>Instância</Label>
-              <Select value={form.instance_id} onValueChange={handleInstanceChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma instância" />
-                </SelectTrigger>
+              <Select value={form.instance_id} onValueChange={onInstance}>
+                <SelectTrigger><SelectValue placeholder="Selecione uma instância" /></SelectTrigger>
                 <SelectContent>
-                  {instances.length === 0 && (
-                    <SelectItem value="_none" disabled>Nenhuma instância encontrada</SelectItem>
-                  )}
+                  {instances.length === 0 && <SelectItem value="_none" disabled>Nenhuma instância</SelectItem>}
                   {instances.map((i) => (
                     <SelectItem key={i.id} value={i.id}>
-                      {i.nome}
-                      <span className={`ml-2 text-xs ${i.status === 'connected' ? 'text-primary' : 'text-zinc-500'}`}>
-                        {i.status === 'connected' ? '● conectada' : '○ desconectada'}
-                      </span>
+                      {i.nome}<span className={`ml-2 text-xs ${i.status === 'connected' ? 'text-primary' : 'text-zinc-500'}`}>{i.status === 'connected' ? '● conectada' : '○ desconectada'}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             {form.instance_id && (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-text-secondary">{waGroups.length} grupos encontrados</span>
-                <Button variant="ghost" size="sm" onClick={handleRefreshGroups} disabled={groupsLoading} className="gap-1.5 h-7 text-xs">
-                  <RefreshCw className={`h-3 w-3 ${groupsLoading ? 'animate-spin' : ''}`} />
-                  Atualizar lista
+                <Button variant="ghost" size="sm" onClick={() => loadGroups(form.instance_id)} disabled={groupsLoading} className="gap-1.5 h-7 text-xs">
+                  <RefreshCw className={`h-3 w-3 ${groupsLoading ? 'animate-spin' : ''}`} />Atualizar lista
                 </Button>
               </div>
             )}
-
-            <GroupSelect
-              label="Grupo origem (de onde extrair)"
-              value={form.source_group_jid}
-              onChange={(v) => setForm((f) => ({ ...f, source_group_jid: v }))}
-              groups={waGroups}
-              loading={groupsLoading}
-            />
-
-            <GroupSelect
-              label="Grupo destino (para onde adicionar)"
-              value={form.dest_group_jid}
-              onChange={(v) => setForm((f) => ({ ...f, dest_group_jid: v }))}
-              groups={waGroups.filter((g) => g.id !== form.source_group_jid)}
-              loading={groupsLoading}
-            />
-
-            <div className="space-y-1.5">
-              <Label>Cap diário de adições <span className="text-text-secondary text-xs">(recomendado ≤50)</span></Label>
-              <Input type="number" min={1} max={200} value={form.daily_add_cap} onChange={(e) => setForm((f) => ({ ...f, daily_add_cap: e.target.value }))} />
-            </div>
-
-            <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 flex gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-              <p className="text-xs text-text-secondary">
-                Adições com delay 30–90s por membro, máx 3/min, respeitam janela horária. Cap diário ≤50 reduz risco de ban.
-              </p>
-            </div>
+            <GroupSelect label="Grupo origem (de onde extrair)" value={form.source_group_jid} onChange={(v) => setForm((f) => ({ ...f, source_group_jid: v }))} groups={waGroups} loading={groupsLoading} />
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={creating || !form.source_group_jid || !form.dest_group_jid}>
-              {creating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Criar
+            <Button variant="outline" onClick={() => setShow(false)}>Cancelar</Button>
+            <Button onClick={create} disabled={creating || !form.source_group_jid}>
+              {creating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Extrair
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog relatório extração */}
+      <Dialog open={!!report} onOpenChange={(o) => !o && setReport(null)}>
+        <DialogContent className="sm:max-w-2xl bg-surface border-border">
+          <DialogHeader><DialogTitle>Relatório — {report?.nome}</DialogTitle></DialogHeader>
+          {report && (
+            <div className="space-y-3">
+              <div className="flex gap-4 text-sm">
+                <span className="text-text-primary font-medium">{report.total_members} membros</span>
+                <span className="text-text-secondary">{report.members.filter((m) => m.is_admin).length} admins</span>
+                <Button size="sm" variant="outline" className="gap-1.5 ml-auto" onClick={() => exportCsv(report)}><Download className="h-3 w-3" />CSV</Button>
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                {report.members.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                    <span className="text-text-primary">{m.phone || m.jid}</span>
+                    {m.is_admin && <span className="text-warning">admin</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+// ═══════════════ Aba ADIÇÕES ═══════════════
+function AddJobsTab() {
+  const [items, setItems] = useState<AddJob[]>([]);
+  const [extractions, setExtractions] = useState<Extraction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [show, setShow] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [report, setReport] = useState<AddJobDetail | null>(null);
+  const { instances, waGroups, groupsLoading, loadGroups, setWaGroups } = useInstancesAndGroups();
+  const [form, setForm] = useState({
+    nome: '', extraction_id: '', dest_instance_id: '', dest_group_jid: '',
+    per_run_limit: '50', daily_add_cap: '50', delay_min_s: '30', delay_max_s: '90', send_invite_on_fail: false,
+  });
+
+  const fetchItems = useCallback(async () => {
+    try { const { data } = await api.get<AddJob[]>('/groups/add-jobs'); setItems(data); }
+    catch { toast.error('Erro ao carregar adições'); }
+    finally { setLoading(false); }
+  }, []);
+  const fetchExtractions = useCallback(async () => {
+    try { const { data } = await api.get<Extraction[]>('/groups/extractions'); setExtractions(data.filter((e) => e.status === 'DONE' && e.total_members > 0)); }
+    catch { /* silent */ }
+  }, []);
+  useEffect(() => { fetchItems(); fetchExtractions(); }, [fetchItems, fetchExtractions]);
+
+  async function onDestInstance(id: string) {
+    setForm((f) => ({ ...f, dest_instance_id: id, dest_group_jid: '' }));
+    await loadGroups(id);
+  }
+  async function create() {
+    if (!form.nome || !form.extraction_id || !form.dest_instance_id || !form.dest_group_jid) { toast.error('Preencha todos os campos'); return; }
+    const g = waGroups.find((x) => x.id === form.dest_group_jid);
+    setCreating(true);
+    try {
+      await api.post('/groups/add-jobs', {
+        nome: form.nome,
+        extraction_id: form.extraction_id,
+        dest_instance_id: form.dest_instance_id,
+        dest_group_jid: form.dest_group_jid,
+        dest_group_name: g?.subject ?? '',
+        per_run_limit: Number(form.per_run_limit),
+        daily_add_cap: Number(form.daily_add_cap),
+        delay_min_s: Number(form.delay_min_s),
+        delay_max_s: Number(form.delay_max_s),
+        send_invite_on_fail: form.send_invite_on_fail,
+      });
+      toast.success('Job de adição criado');
+      setShow(false);
+      setForm({ nome: '', extraction_id: '', dest_instance_id: '', dest_group_jid: '', per_run_limit: '50', daily_add_cap: '50', delay_min_s: '30', delay_max_s: '90', send_invite_on_fail: false });
+      setWaGroups([]);
+      fetchItems();
+    } catch (e) { toast.error(errMsg(e, 'Erro ao criar job')); }
+    finally { setCreating(false); }
+  }
+  async function run(id: string) {
+    setBusy(id + ':run');
+    try { const { data } = await api.post<{ queued: number }>(`/groups/add-jobs/${id}/run`, {}); toast.success(`${data.queued} adições enfileiradas`); fetchItems(); }
+    catch (e) { toast.error(errMsg(e, 'Erro ao rodar')); }
+    finally { setBusy(null); }
+  }
+  async function pause(id: string) {
+    setBusy(id + ':pause');
+    try { await api.post(`/groups/add-jobs/${id}/pause`); toast.success('Pausado'); fetchItems(); }
+    catch (e) { toast.error(errMsg(e, 'Erro ao pausar')); }
+    finally { setBusy(null); }
+  }
+  async function del(id: string, nome: string) {
+    if (!confirm(`Deletar job "${nome}"?`)) return;
+    try { await api.delete(`/groups/add-jobs/${id}`); toast.success('Deletado'); setItems((p) => p.filter((x) => x.id !== id)); }
+    catch (e) { toast.error(errMsg(e, 'Erro ao deletar')); }
+  }
+  async function openReport(id: string) {
+    try { const { data } = await api.get<AddJobDetail>(`/groups/add-jobs/${id}`); setReport(data); }
+    catch { toast.error('Erro ao carregar relatório'); }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setShow(true)} className="gap-2"><Plus className="h-4 w-4" />Novo job de adição</Button>
+      </div>
+
+      {loading ? <div className="grid gap-4">{[1, 2].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}</div>
+        : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-text-secondary gap-3">
+            <UsersRound className="h-10 w-10 opacity-30" />
+            <p className="text-sm">Nenhum job de adição. Crie uma extração primeiro.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {items.map((j) => {
+              const total = j._count?.targets ?? 0;
+              const done = j.added_count + j.failed_count + j.skipped_count;
+              const canRun = j.status !== 'RUNNING';
+              const canPause = j.status === 'RUNNING';
+              return (
+                <Card key={j.id} className="bg-surface border-border">
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-text-primary truncate">{j.nome}</span>
+                          <Badge map={JOB_STATUS} status={j.status} />
+                          <span className="text-xs text-text-secondary">{j.dest_instance.nome}</span>
+                        </div>
+                        <p className="text-xs text-text-secondary mt-1 truncate">
+                          {j.extraction.nome} → {j.dest_group_name || j.dest_group_jid}
+                        </p>
+                        <div className="mt-3 space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-green-400">{j.added_count} adicionados</span>
+                            <span className="text-danger">{j.failed_count} falhas</span>
+                            <span className="text-text-secondary">{total - done} pendentes</span>
+                          </div>
+                          <ProgressBar value={done} max={total} />
+                        </div>
+                        <div className="mt-2 flex gap-4 text-xs text-text-secondary">
+                          <span>Lote: {j.per_run_limit}</span>
+                          <span>Cap diário: {j.daily_add_cap} (hoje {j.added_today})</span>
+                          <span>Delay {j.delay_min_s}-{j.delay_max_s}s</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button size="sm" variant="outline" onClick={() => openReport(j.id)} className="gap-1.5"><FileBarChart className="h-3 w-3" />Relatório</Button>
+                        {canRun && <Button size="sm" onClick={() => run(j.id)} disabled={busy === j.id + ':run'} className="gap-1.5">{busy === j.id + ':run' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}Rodar lote</Button>}
+                        {canPause && <Button size="sm" variant="outline" onClick={() => pause(j.id)} disabled={busy === j.id + ':pause'} className="gap-1.5">{busy === j.id + ':pause' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}Pausar</Button>}
+                        <Button size="sm" variant="ghost" onClick={() => del(j.id, j.nome)} className="text-danger hover:text-danger hover:bg-danger/10"><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+      {/* Dialog criar job */}
+      <Dialog open={show} onOpenChange={(o) => { setShow(o); if (!o) setWaGroups([]); }}>
+        <DialogContent className="sm:max-w-lg bg-surface border-border max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Novo job de adição</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Nome</Label>
+              <Input placeholder="Ex: Distribuidora → VIP (lote 1)" value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Extração (fonte dos membros)</Label>
+              <Select value={form.extraction_id} onValueChange={(v) => setForm((f) => ({ ...f, extraction_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione uma extração" /></SelectTrigger>
+                <SelectContent>
+                  {extractions.length === 0 && <SelectItem value="_none" disabled>Nenhuma extração pronta</SelectItem>}
+                  {extractions.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>{e.nome} <span className="text-xs text-zinc-500 ml-1">({e.total_members} membros)</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Instância destino (quem adiciona)</Label>
+              <Select value={form.dest_instance_id} onValueChange={onDestInstance}>
+                <SelectTrigger><SelectValue placeholder="Selecione uma instância" /></SelectTrigger>
+                <SelectContent>
+                  {instances.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.nome}<span className={`ml-2 text-xs ${i.status === 'connected' ? 'text-primary' : 'text-zinc-500'}`}>{i.status === 'connected' ? '● conectada' : '○ desconectada'}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {form.dest_instance_id && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-text-secondary">{waGroups.length} grupos encontrados</span>
+                <Button variant="ghost" size="sm" onClick={() => loadGroups(form.dest_instance_id)} disabled={groupsLoading} className="gap-1.5 h-7 text-xs">
+                  <RefreshCw className={`h-3 w-3 ${groupsLoading ? 'animate-spin' : ''}`} />Atualizar lista
+                </Button>
+              </div>
+            )}
+            <GroupSelect label="Grupo destino (para onde adicionar)" value={form.dest_group_jid} onChange={(v) => setForm((f) => ({ ...f, dest_group_jid: v }))} groups={waGroups} loading={groupsLoading} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Limite por rodada</Label>
+                <Input type="number" min={1} max={500} value={form.per_run_limit} onChange={(e) => setForm((f) => ({ ...f, per_run_limit: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cap diário</Label>
+                <Input type="number" min={1} max={500} value={form.daily_add_cap} onChange={(e) => setForm((f) => ({ ...f, daily_add_cap: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Delay mín (s)</Label>
+                <Input type="number" min={5} max={600} value={form.delay_min_s} onChange={(e) => setForm((f) => ({ ...f, delay_min_s: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Delay máx (s)</Label>
+                <Input type="number" min={5} max={600} value={form.delay_max_s} onChange={(e) => setForm((f) => ({ ...f, delay_max_s: e.target.value }))} />
+              </div>
+            </div>
+
+            {/* Toggle convite — VISUAL, em standby (fase 2) */}
+            <button type="button" onClick={() => setForm((f) => ({ ...f, send_invite_on_fail: !f.send_invite_on_fail }))}
+              className="w-full flex items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2.5 text-left">
+              <div>
+                <p className="text-sm text-text-primary">Enviar convite por DM se a adição falhar</p>
+                <p className="text-xs text-text-secondary">Em breve — privacidade do contato bloqueia adição direta</p>
+              </div>
+              <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${form.send_invite_on_fail ? 'bg-primary' : 'bg-zinc-700'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.send_invite_on_fail ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+
+            <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 flex gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-xs text-text-secondary">Adições com delay e cap diário reduzem risco de ban. Recomendado ≤50/dia por instância. Falha por privacidade do contato é normal.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShow(false)}>Cancelar</Button>
+            <Button onClick={create} disabled={creating || !form.dest_group_jid || !form.extraction_id}>
+              {creating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Criar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog relatório job */}
+      <Dialog open={!!report} onOpenChange={(o) => !o && setReport(null)}>
+        <DialogContent className="sm:max-w-2xl bg-surface border-border">
+          <DialogHeader><DialogTitle>Relatório — {report?.nome}</DialogTitle></DialogHeader>
+          {report && <AddJobReport job={report} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function AddJobReport({ job }: { job: AddJobDetail }) {
+  const counts = job.targets.reduce<Record<string, number>>((acc, t) => { acc[t.status] = (acc[t.status] ?? 0) + 1; return acc; }, {});
+  const failed = job.targets.filter((t) => t.status === 'FAILED');
+  // motivos agrupados
+  const reasons = failed.reduce<Record<string, number>>((acc, t) => { const r = t.error ?? 'desconhecido'; acc[r] = (acc[r] ?? 0) + 1; return acc; }, {});
+  function exportCsv() {
+    const rows = [['phone', 'status', 'tentativas', 'erro', 'adicionado_em'],
+      ...job.targets.map((t) => [t.phone, t.status, String(t.attempts), t.error ?? '', t.added_at ?? ''])];
+    downloadCsv(rows, `adicao-${job.nome}.csv`);
+  }
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        <Stat icon={<CheckCircle2 className="h-4 w-4 text-green-400" />} label="Adicionados" value={counts.DONE ?? 0} />
+        <Stat icon={<XCircle className="h-4 w-4 text-danger" />} label="Falhas" value={counts.FAILED ?? 0} />
+        <Stat icon={<Clock className="h-4 w-4 text-zinc-400" />} label="Pendentes" value={(counts.PENDING ?? 0) + (counts.PROCESSING ?? 0)} />
+      </div>
+      {Object.keys(reasons).length > 0 && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-medium text-text-primary mb-2">Motivos de falha</p>
+          <div className="space-y-1">
+            {Object.entries(reasons).map(([r, n]) => (
+              <div key={r} className="flex justify-between text-xs"><span className="text-text-secondary truncate mr-2">{r}</span><span className="text-danger shrink-0">{n}</span></div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportCsv}><Download className="h-3 w-3" />Exportar CSV</Button>
+      </div>
+      <div className="max-h-72 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+        {job.targets.map((t) => (
+          <div key={t.id} className="flex items-center justify-between px-3 py-1.5 text-xs gap-2">
+            <span className="text-text-primary shrink-0">{t.phone || t.member_jid}</span>
+            <span className={`${TARGET_STATUS[t.status]?.cls ?? 'text-zinc-400'} shrink-0`}>{TARGET_STATUS[t.status]?.label ?? t.status}</span>
+            {t.error && <span className="text-text-secondary truncate ml-auto">{t.error}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border p-3 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">{icon}<span className="text-xs text-text-secondary">{label}</span></div>
+      <span className="text-lg font-bold text-text-primary">{value}</span>
+    </div>
+  );
+}
+
+function downloadCsv(rows: string[][], filename: string) {
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }

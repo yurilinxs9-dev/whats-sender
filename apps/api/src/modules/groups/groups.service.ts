@@ -3,7 +3,6 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -11,16 +10,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { UazApiService } from '../uazapi/uazapi.service';
 import { SenderGateway } from '../websocket/websocket.gateway';
 import { QUEUE_GROUP_ADD } from '../queues/queue-constants';
-import { CreateGroupSyncDto } from './dto/create-group-sync.dto';
+import { CreateExtractionDto, CreateAddJobDto } from './dto/group.dto';
 import type { GroupAddJobData } from '../queues/workers/group-add.worker';
-
-const BATCH_SIZE = 5;
-const BASE_DELAY_MS = 30_000;
-const JITTER_MS = 60_000;
-
-function randomDelay(): number {
-  return BASE_DELAY_MS + Math.floor(Math.random() * JITTER_MS);
-}
 
 @Injectable()
 export class GroupsService {
@@ -33,181 +24,261 @@ export class GroupsService {
     @InjectQueue(QUEUE_GROUP_ADD) private groupAddQueue: Queue<GroupAddJobData>,
   ) {}
 
-  async create(tenantId: string, dto: CreateGroupSyncDto) {
+  /* ──────────────────────────────────────────────────
+   *  Extrações
+   * ────────────────────────────────────────────────── */
+
+  async createExtraction(tenantId: string, dto: CreateExtractionDto) {
     const instance = await this.prisma.instance.findFirst({
       where: { id: dto.instance_id, tenant_id: tenantId },
     });
-    if (!instance) throw new NotFoundException('Instance not found');
-    if (instance.status !== 'connected') {
-      throw new BadRequestException('Instance must be connected');
-    }
+    if (!instance) throw new NotFoundException('Instância não encontrada');
+    if (instance.status !== 'connected') throw new BadRequestException('Instância precisa estar conectada');
 
-    return this.prisma.groupSync.create({
+    const extraction = await this.prisma.groupExtraction.create({
       data: {
         nome: dto.nome,
-        source_group_jid: dto.source_group_jid,
-        dest_group_jid: dto.dest_group_jid,
         instance_id: dto.instance_id,
         tenant_id: tenantId,
-        daily_add_cap: dto.daily_add_cap,
+        source_group_jid: dto.source_group_jid,
+        source_group_name: dto.source_group_name ?? '',
+        status: 'PENDING',
       },
     });
+    // Roda a extração já na criação
+    return this.runExtraction(tenantId, extraction.id);
   }
 
-  findAll(tenantId: string) {
-    return this.prisma.groupSync.findMany({
-      where: { tenant_id: tenantId },
-      orderBy: { created_at: 'desc' },
-      include: { instance: { select: { nome: true, status: true } } },
-    });
-  }
+  async runExtraction(tenantId: string, id: string) {
+    const extraction = await this.assertExtraction(tenantId, id);
 
-  async findOne(tenantId: string, id: string) {
-    const sync = await this.prisma.groupSync.findFirst({
-      where: { id, tenant_id: tenantId },
-      include: {
-        instance: { select: { nome: true, status: true } },
-        participants: { orderBy: { created_at: 'desc' } },
-      },
-    });
-    if (!sync) throw new NotFoundException('GroupSync not found');
-    return sync;
-  }
+    const instance = await this.prisma.instance.findUnique({ where: { id: extraction.instance_id } });
+    const token = this.extractToken(instance?.config);
+    if (!token) throw new BadRequestException('Instância sem token UazAPI. Reconecte.');
 
-  async extract(tenantId: string, id: string) {
-    const sync = await this.assertOwner(tenantId, id);
-    if (sync.status === 'ADDING') {
-      throw new BadRequestException('Cannot re-extract while adding is in progress');
-    }
-
-    const instance = await this.prisma.instance.findUnique({ where: { id: sync.instance_id } });
-    const instanceToken = this.extractToken(instance?.config);
-    if (!instanceToken) throw new BadRequestException('Instance has no UazAPI token. Reconnect it.');
-
-    await this.prisma.groupSync.update({
-      where: { id },
-      data: { status: 'EXTRACTING' },
-    });
-    this.gateway.emitGroupSyncProgress(id, { status: 'EXTRACTING' }, tenantId);
+    await this.prisma.groupExtraction.update({ where: { id }, data: { status: 'EXTRACTING', error: null } });
+    this.gateway.emitExtractionProgress(id, { status: 'EXTRACTING' }, tenantId);
 
     try {
-      const result = await this.uazapi.getGroupParticipants(
-        instanceToken,
-        sync.source_group_jid,
-      );
+      const result = await this.uazapi.getGroupParticipants(token, extraction.source_group_jid);
 
-      const jids = result.participants.map((p) => p.id);
-
-      // Upsert to avoid duplicates on re-extract
+      // Upsert dos membros (idempotente em re-extração)
       await Promise.all(
-        jids.map((jid) =>
-          this.prisma.groupSyncParticipant.upsert({
-            where: { sync_id_jid: { sync_id: id, jid } },
+        result.participants.map((p) => {
+          const jid = p.id;
+          const phone = jid.replace(/@.*$/, '');
+          return this.prisma.extractedMember.upsert({
+            where: { extraction_id_jid: { extraction_id: id, jid } },
             create: {
-              sync_id: id,
+              extraction_id: id,
               jid,
-              phone: jid.replace('@s.whatsapp.net', '').replace('@c.us', ''),
-              status: 'PENDING',
+              phone,
+              is_admin: p.admin === 'admin' || p.admin === 'superadmin',
             },
-            update: {}, // keep existing status if re-extracting
-          }),
-        ),
+            update: { is_admin: p.admin === 'admin' || p.admin === 'superadmin' },
+          });
+        }),
       );
 
-      const updated = await this.prisma.groupSync.update({
+      const total = await this.prisma.extractedMember.count({ where: { extraction_id: id } });
+      const updated = await this.prisma.groupExtraction.update({
         where: { id },
-        data: { status: 'IDLE', extracted_count: jids.length },
+        data: { status: 'DONE', total_members: total, extracted_at: new Date() },
       });
-
-      this.gateway.emitGroupSyncProgress(id, { status: 'IDLE', extracted: jids.length }, tenantId);
-      this.logger.log(`GroupSync ${id}: extracted ${jids.length} participants`);
+      this.gateway.emitExtractionProgress(id, { status: 'DONE', total }, tenantId);
+      this.logger.log(`Extração ${id}: ${total} membros`);
       return updated;
     } catch (error) {
-      await this.prisma.groupSync.update({ where: { id }, data: { status: 'FAILED' } });
-      this.gateway.emitGroupSyncProgress(id, { status: 'FAILED' }, tenantId);
+      await this.prisma.groupExtraction.update({
+        where: { id },
+        data: { status: 'FAILED', error: (error as Error).message },
+      });
+      this.gateway.emitExtractionProgress(id, { status: 'FAILED' }, tenantId);
       throw error;
     }
   }
 
-  async start(tenantId: string, id: string) {
-    const sync = await this.assertOwner(tenantId, id);
-    if (sync.status === 'ADDING') throw new BadRequestException('Already running');
-    if (sync.extracted_count === 0) throw new BadRequestException('Extract participants first');
-
-    const instance = await this.prisma.instance.findUnique({ where: { id: sync.instance_id } });
-    const instanceToken = this.extractToken(instance?.config);
-    if (!instanceToken) throw new BadRequestException('Instance has no UazAPI token. Reconnect it.');
-
-    const pending = await this.prisma.groupSyncParticipant.findMany({
-      where: { sync_id: id, status: 'PENDING' },
-      select: { id: true },
+  listExtractions(tenantId: string) {
+    return this.prisma.groupExtraction.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        instance: { select: { nome: true, status: true } },
+        _count: { select: { members: true, add_jobs: true } },
+      },
     });
+  }
 
-    if (pending.length === 0) throw new BadRequestException('No pending participants to add');
+  async getExtraction(tenantId: string, id: string) {
+    const extraction = await this.prisma.groupExtraction.findFirst({
+      where: { id, tenant_id: tenantId },
+      include: {
+        instance: { select: { nome: true, status: true } },
+        members: { orderBy: { created_at: 'asc' } },
+      },
+    });
+    if (!extraction) throw new NotFoundException('Extração não encontrada');
+    return extraction;
+  }
 
-    await this.prisma.groupSync.update({ where: { id }, data: { status: 'ADDING' } });
+  async removeExtraction(tenantId: string, id: string) {
+    await this.assertExtraction(tenantId, id);
+    await this.prisma.groupExtraction.delete({ where: { id } });
+  }
 
-    // Enqueue in batches — each job gets a growing delay for anti-ban jitter
-    let jobIndex = 0;
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const batch = pending.slice(i, i + BATCH_SIZE);
-      for (const participant of batch) {
-        const delay = randomDelay() * Math.ceil((jobIndex + 1) / BATCH_SIZE);
-        await this.groupAddQueue.add(
-          'add-participant',
-          {
-            syncId: id,
-            participantId: participant.id,
-            groupJid: sync.dest_group_jid,
-            instanceToken,
-            tenantId,
-          },
-          {
-            delay,
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 60_000 },
-            removeOnComplete: { count: 500 },
-            removeOnFail: { count: 200 },
-          },
-        );
-        jobIndex++;
-      }
+  /* ──────────────────────────────────────────────────
+   *  Jobs de adição
+   * ────────────────────────────────────────────────── */
+
+  async createAddJob(tenantId: string, dto: CreateAddJobDto) {
+    const extraction = await this.prisma.groupExtraction.findFirst({
+      where: { id: dto.extraction_id, tenant_id: tenantId },
+      include: { members: { select: { jid: true, phone: true } } },
+    });
+    if (!extraction) throw new NotFoundException('Extração não encontrada');
+    if (extraction.status !== 'DONE' || extraction.members.length === 0) {
+      throw new BadRequestException('Extração ainda não tem membros. Extraia primeiro.');
     }
 
-    this.gateway.emitGroupSyncProgress(id, { status: 'ADDING', queued: pending.length }, tenantId);
-    this.logger.log(`GroupSync ${id}: enqueued ${pending.length} jobs`);
+    const destInstance = await this.prisma.instance.findFirst({
+      where: { id: dto.dest_instance_id, tenant_id: tenantId },
+    });
+    if (!destInstance) throw new NotFoundException('Instância destino não encontrada');
+    if (destInstance.status !== 'connected') throw new BadRequestException('Instância destino precisa estar conectada');
+
+    const job = await this.prisma.groupAddJob.create({
+      data: {
+        nome: dto.nome,
+        tenant_id: tenantId,
+        extraction_id: dto.extraction_id,
+        dest_instance_id: dto.dest_instance_id,
+        dest_group_jid: dto.dest_group_jid,
+        dest_group_name: dto.dest_group_name ?? '',
+        per_run_limit: dto.per_run_limit,
+        daily_add_cap: dto.daily_add_cap,
+        delay_min_s: dto.delay_min_s,
+        delay_max_s: dto.delay_max_s,
+        send_invite_on_fail: dto.send_invite_on_fail,
+        status: 'IDLE',
+      },
+    });
+
+    // Snapshot dos alvos a partir dos membros da extração (dedupe por unique job+member_jid)
+    await this.prisma.addTarget.createMany({
+      data: extraction.members.map((m) => ({
+        job_id: job.id,
+        member_jid: m.jid,
+        phone: m.phone,
+      })),
+      skipDuplicates: true,
+    });
+
+    return this.getAddJob(tenantId, job.id);
+  }
+
+  listAddJobs(tenantId: string) {
+    return this.prisma.groupAddJob.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        dest_instance: { select: { nome: true, status: true } },
+        extraction: { select: { nome: true, source_group_name: true } },
+        _count: { select: { targets: true } },
+      },
+    });
+  }
+
+  async getAddJob(tenantId: string, id: string) {
+    const job = await this.prisma.groupAddJob.findFirst({
+      where: { id, tenant_id: tenantId },
+      include: {
+        dest_instance: { select: { nome: true, status: true } },
+        extraction: { select: { nome: true, source_group_name: true } },
+        targets: { orderBy: { created_at: 'asc' } },
+      },
+    });
+    if (!job) throw new NotFoundException('Job de adição não encontrado');
+    return job;
+  }
+
+  async runAddJob(tenantId: string, id: string, limitOverride?: number) {
+    const job = await this.assertAddJob(tenantId, id);
+    if (job.status === 'RUNNING') throw new BadRequestException('Job já está rodando');
+
+    const destInstance = await this.prisma.instance.findUnique({ where: { id: job.dest_instance_id } });
+    if (!this.extractToken(destInstance?.config)) {
+      throw new BadRequestException('Instância destino sem token UazAPI. Reconecte.');
+    }
+
+    const limit = Math.max(1, Math.min(limitOverride ?? job.per_run_limit, 500));
+    const pending = await this.prisma.addTarget.findMany({
+      where: { job_id: id, status: 'PENDING' },
+      select: { id: true },
+      take: limit,
+    });
+    if (pending.length === 0) throw new BadRequestException('Nenhum alvo pendente para adicionar');
+
+    await this.prisma.groupAddJob.update({ where: { id }, data: { status: 'RUNNING' } });
+
+    // Espaça as adições: delay cumulativo com jitter entre delay_min_s e delay_max_s
+    let cumMs = 0;
+    for (const target of pending) {
+      const gapS = job.delay_min_s + Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
+      cumMs += Math.round(gapS * 1000);
+      await this.groupAddQueue.add(
+        'add-target',
+        { jobId: id, targetId: target.id, tenantId },
+        {
+          delay: cumMs,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 },
+          removeOnComplete: { count: 1000 },
+          removeOnFail: { count: 500 },
+        },
+      );
+    }
+
+    this.gateway.emitAddJobProgress(id, { status: 'RUNNING', queued: pending.length }, tenantId);
+    this.logger.log(`AddJob ${id}: ${pending.length} alvos enfileirados (limite ${limit})`);
     return { queued: pending.length };
   }
 
-  async pause(tenantId: string, id: string) {
-    await this.assertOwner(tenantId, id);
-    const updated = await this.prisma.groupSync.update({
-      where: { id },
-      data: { status: 'PAUSED' },
-    });
-    this.gateway.emitGroupSyncProgress(id, { status: 'PAUSED' }, tenantId);
+  async pauseAddJob(tenantId: string, id: string) {
+    await this.assertAddJob(tenantId, id);
+    const updated = await this.prisma.groupAddJob.update({ where: { id }, data: { status: 'PAUSED' } });
+    this.gateway.emitAddJobProgress(id, { status: 'PAUSED' }, tenantId);
     return updated;
   }
 
-  async remove(tenantId: string, id: string) {
-    await this.assertOwner(tenantId, id);
-    await this.prisma.groupSync.delete({ where: { id } });
+  async removeAddJob(tenantId: string, id: string) {
+    await this.assertAddJob(tenantId, id);
+    await this.prisma.groupAddJob.delete({ where: { id } });
   }
+
+  /* ──────────────────────────────────────────────────
+   *  Comum
+   * ────────────────────────────────────────────────── */
 
   async listInstanceGroups(tenantId: string, instanceId: string) {
     const instance = await this.prisma.instance.findFirst({
       where: { id: instanceId, tenant_id: tenantId },
     });
-    if (!instance) throw new NotFoundException('Instance not found');
+    if (!instance) throw new NotFoundException('Instância não encontrada');
     const token = this.extractToken(instance.config);
-    if (!token) throw new BadRequestException('Instance has no UazAPI token. Reconnect it.');
+    if (!token) throw new BadRequestException('Instância sem token UazAPI. Reconecte.');
     return this.uazapi.listGroups(token);
   }
 
-  private async assertOwner(tenantId: string, id: string) {
-    const sync = await this.prisma.groupSync.findFirst({ where: { id, tenant_id: tenantId } });
-    if (!sync) throw new NotFoundException('GroupSync not found');
-    return sync;
+  private async assertExtraction(tenantId: string, id: string) {
+    const e = await this.prisma.groupExtraction.findFirst({ where: { id, tenant_id: tenantId } });
+    if (!e) throw new NotFoundException('Extração não encontrada');
+    return e;
+  }
+
+  private async assertAddJob(tenantId: string, id: string) {
+    const j = await this.prisma.groupAddJob.findFirst({ where: { id, tenant_id: tenantId } });
+    if (!j) throw new NotFoundException('Job de adição não encontrado');
+    return j;
   }
 
   private extractToken(config: unknown): string | null {

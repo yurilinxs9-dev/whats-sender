@@ -7,14 +7,22 @@ import { UazApiService } from '../../uazapi/uazapi.service';
 import { SenderGateway } from '../../websocket/websocket.gateway';
 
 export interface GroupAddJobData {
-  syncId: string;
-  participantId: string;
-  groupJid: string;
-  instanceToken: string;
+  jobId: string;
+  targetId: string;
   tenantId: string;
 }
 
 const DAILY_RESET_HOUR = 0;
+
+function extractToken(config: unknown): string | null {
+  if (config && typeof config === 'object' && !Array.isArray(config)) {
+    const c = config as Record<string, unknown>;
+    if (typeof c.uazapi_token === 'string' && c.uazapi_token.length > 0) {
+      return c.uazapi_token;
+    }
+  }
+  return null;
+}
 
 @Processor(QUEUE_GROUP_ADD, {
   limiter: { max: 3, duration: 60_000 },
@@ -31,111 +39,130 @@ export class GroupAddWorker extends WorkerHost {
   }
 
   async process(job: Job<GroupAddJobData>): Promise<void> {
-    const { syncId, participantId, groupJid, instanceToken, tenantId } = job.data;
+    const { jobId, targetId, tenantId } = job.data;
 
-    const sync = await this.prisma.groupSync.findUnique({ where: { id: syncId } });
-    if (!sync || sync.status === 'PAUSED' || sync.status === 'FAILED') {
-      await this.markParticipant(participantId, 'SKIPPED');
+    const addJob = await this.prisma.groupAddJob.findUnique({
+      where: { id: jobId },
+      include: { dest_instance: true },
+    });
+    if (!addJob || addJob.status === 'PAUSED' || addJob.status === 'FAILED' || addJob.status === 'COMPLETED') {
+      await this.markTarget(targetId, 'SKIPPED');
       return;
     }
 
-    await this.resetDailyCountIfNeeded(syncId);
+    await this.resetDailyCountIfNeeded(jobId);
 
-    const freshSync = await this.prisma.groupSync.findUnique({ where: { id: syncId } });
-    if (freshSync && freshSync.added_today >= freshSync.daily_add_cap) {
-      this.logger.warn(`GroupSync ${syncId} hit daily cap (${freshSync.daily_add_cap}). Re-queuing for tomorrow.`);
-      await this.markParticipant(participantId, 'PENDING');
-      // Delay until next midnight
+    const fresh = await this.prisma.groupAddJob.findUnique({ where: { id: jobId } });
+    if (fresh && fresh.added_today >= fresh.daily_add_cap) {
+      this.logger.warn(`AddJob ${jobId} atingiu cap diário (${fresh.daily_add_cap}). Re-enfileira p/ amanhã.`);
+      await this.markTarget(targetId, 'PENDING');
       const msUntilMidnight = this.msUntilHour(DAILY_RESET_HOUR + 1);
       throw Object.assign(new Error('daily_cap_reached'), { delay: msUntilMidnight });
     }
 
     const settings = await this.prisma.tenantSettings.findUnique({ where: { tenant_id: tenantId } });
     if (settings && !this.isWithinSendWindow(settings.send_window_start, settings.send_window_end)) {
-      this.logger.log(`GroupSync ${syncId} outside send window. Re-queuing.`);
-      await this.markParticipant(participantId, 'PENDING');
+      this.logger.log(`AddJob ${jobId} fora da janela de envio. Re-enfileira.`);
+      await this.markTarget(targetId, 'PENDING');
       const msUntilWindow = this.msUntilWindowOpen(settings.send_window_start);
       throw Object.assign(new Error('outside_send_window'), { delay: msUntilWindow });
     }
 
-    await this.prisma.groupSyncParticipant.update({
-      where: { id: participantId },
+    const token = extractToken(addJob.dest_instance?.config);
+    if (!token) {
+      await this.markTarget(targetId, 'FAILED', 'instância destino sem token UazAPI');
+      await this.prisma.groupAddJob.update({ where: { id: jobId }, data: { failed_count: { increment: 1 } } });
+      return;
+    }
+
+    const target = await this.prisma.addTarget.findUnique({ where: { id: targetId } });
+    if (!target) return;
+
+    await this.prisma.addTarget.update({
+      where: { id: targetId },
       data: { status: 'PROCESSING', attempts: { increment: 1 } },
     });
 
     try {
-      const result = await this.uazapi.addGroupParticipants(instanceToken, groupJid, [
-        (await this.prisma.groupSyncParticipant.findUnique({ where: { id: participantId } }))!.jid,
-      ]);
+      const memberId = target.phone || target.member_jid;
+      const result = await this.uazapi.addGroupParticipants(token, addJob.dest_group_jid, [memberId]);
 
       const succeeded = result.added.some((r) => r.status === '200' || r.status === 'success');
       const errorStatus = result.failed[0]?.status;
 
       if (succeeded) {
-        await this.prisma.groupSyncParticipant.update({
-          where: { id: participantId },
+        await this.prisma.addTarget.update({
+          where: { id: targetId },
           data: { status: 'DONE', added_at: new Date() },
         });
-        await this.prisma.groupSync.update({
-          where: { id: syncId },
+        await this.prisma.groupAddJob.update({
+          where: { id: jobId },
           data: { added_count: { increment: 1 }, added_today: { increment: 1 } },
         });
       } else {
-        await this.markParticipant(participantId, 'FAILED', errorStatus ?? 'unknown error');
-        await this.prisma.groupSync.update({
-          where: { id: syncId },
+        // send_invite_on_fail: toggle existe mas convite está em STANDBY (fase 2).
+        // Por ora só registra o motivo da falha.
+        await this.markTarget(targetId, 'FAILED', errorStatus ?? 'falha desconhecida');
+        await this.prisma.groupAddJob.update({
+          where: { id: jobId },
           data: { failed_count: { increment: 1 } },
         });
       }
 
-      const updated = await this.prisma.groupSync.findUnique({ where: { id: syncId } });
-      if (updated) {
-        this.gateway.emitGroupSyncProgress(syncId, {
-          added: updated.added_count,
-          failed: updated.failed_count,
-          extracted: updated.extracted_count,
-        }, tenantId);
-
-        const pending = await this.prisma.groupSyncParticipant.count({
-          where: { sync_id: syncId, status: { in: ['PENDING', 'PROCESSING'] } },
-        });
-        if (pending === 0) {
-          await this.prisma.groupSync.update({
-            where: { id: syncId },
-            data: { status: 'COMPLETED', last_run_at: new Date() },
-          });
-          this.gateway.emitGroupSyncCompleted(syncId, tenantId);
-        }
-      }
+      await this.emitAndMaybeComplete(jobId, tenantId);
     } catch (error) {
-      this.logger.error(`GroupAddWorker error for participant ${participantId}: ${(error as Error).message}`);
-      await this.markParticipant(participantId, 'FAILED', (error as Error).message);
-      await this.prisma.groupSync.update({
-        where: { id: syncId },
+      this.logger.error(`GroupAddWorker erro target ${targetId}: ${(error as Error).message}`);
+      await this.markTarget(targetId, 'FAILED', (error as Error).message);
+      await this.prisma.groupAddJob.update({
+        where: { id: jobId },
         data: { failed_count: { increment: 1 } },
       });
+      await this.emitAndMaybeComplete(jobId, tenantId);
     }
   }
 
-  private async markParticipant(id: string, status: string, error?: string) {
-    await this.prisma.groupSyncParticipant.update({
+  private async emitAndMaybeComplete(jobId: string, tenantId: string) {
+    const updated = await this.prisma.groupAddJob.findUnique({ where: { id: jobId } });
+    if (!updated) return;
+    this.gateway.emitAddJobProgress(
+      jobId,
+      { added: updated.added_count, failed: updated.failed_count, skipped: updated.skipped_count, added_today: updated.added_today },
+      tenantId,
+    );
+    const pending = await this.prisma.addTarget.count({
+      where: { job_id: jobId, status: { in: ['PENDING', 'PROCESSING'] } },
+    });
+    if (pending === 0) {
+      await this.prisma.groupAddJob.update({
+        where: { id: jobId },
+        data: { status: 'COMPLETED', last_run_at: new Date() },
+      });
+      this.gateway.emitAddJobCompleted(jobId, tenantId);
+    }
+  }
+
+  private async markTarget(id: string, status: string, error?: string) {
+    await this.prisma.addTarget.update({
       where: { id },
-      data: { status: status as 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'SKIPPED', ...(error && { error }) },
+      data: {
+        status: status as 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'SKIPPED' | 'INVITED',
+        ...(error && { error }),
+      },
     });
   }
 
-  private async resetDailyCountIfNeeded(syncId: string) {
-    const sync = await this.prisma.groupSync.findUnique({ where: { id: syncId } });
-    if (!sync) return;
-    const lastReset = sync.last_reset_at;
+  private async resetDailyCountIfNeeded(jobId: string) {
+    const job = await this.prisma.groupAddJob.findUnique({ where: { id: jobId } });
+    if (!job) return;
+    const lastReset = job.last_reset_at;
     const now = new Date();
     const sameDay =
       lastReset.getFullYear() === now.getFullYear() &&
       lastReset.getMonth() === now.getMonth() &&
       lastReset.getDate() === now.getDate();
     if (!sameDay) {
-      await this.prisma.groupSync.update({
-        where: { id: syncId },
+      await this.prisma.groupAddJob.update({
+        where: { id: jobId },
         data: { added_today: 0, last_reset_at: now },
       });
     }

@@ -26,7 +26,8 @@ model Tenant {
   campaigns     Campaign[]
   blacklist     Blacklist[]
   settings      TenantSettings?
-  group_syncs   GroupSync[]
+  group_extractions GroupExtraction[]
+  group_add_jobs    GroupAddJob[]
 }
 
 model User {
@@ -115,7 +116,8 @@ model Instance {
   campaign_instances CampaignInstance[]
   health_logs        InstanceHealthLog[]
   warmup_logs        WarmupLog[]
-  group_syncs        GroupSync[]
+  group_extractions  GroupExtraction[]
+  add_jobs           GroupAddJob[] @relation("InstanceAddJobs")
 
   @@index([tenant_id])
   @@index([status])
@@ -425,61 +427,113 @@ enum DispatchStatus {
 // ============================================================
 // Group Sync
 // ============================================================
-model GroupSync {
-  id               String          @id @default(uuid())
-  nome             String
-  source_group_jid String
-  dest_group_jid   String
-  instance_id      String
-  instance         Instance        @relation(fields: [instance_id], references: [id])
-  tenant_id        String
-  tenant           Tenant          @relation(fields: [tenant_id], references: [id])
-  status           GroupSyncStatus @default(IDLE)
-  extracted_count  Int             @default(0)
-  added_count      Int             @default(0)
-  failed_count     Int             @default(0)
-  daily_add_cap    Int             @default(50)
-  added_today      Int             @default(0)
-  last_reset_at    DateTime        @default(now())
-  last_run_at      DateTime?
-  created_at       DateTime        @default(now())
-  updated_at       DateTime        @updatedAt
+// ── Extração: extrai membros de um grupo 1x, salva, reaproveita ──
+model GroupExtraction {
+  id                String           @id @default(uuid())
+  nome              String
+  instance_id       String
+  instance          Instance         @relation(fields: [instance_id], references: [id])
+  tenant_id         String
+  tenant            Tenant           @relation(fields: [tenant_id], references: [id])
+  source_group_jid  String
+  source_group_name String           @default("")
+  total_members     Int              @default(0)
+  status            ExtractionStatus @default(PENDING)
+  error             String?
+  extracted_at      DateTime?
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @updatedAt
 
-  participants GroupSyncParticipant[]
+  members  ExtractedMember[]
+  add_jobs GroupAddJob[]
 
   @@index([tenant_id])
   @@index([status])
 }
 
-enum GroupSyncStatus {
-  IDLE
+enum ExtractionStatus {
+  PENDING
   EXTRACTING
-  ADDING
+  DONE
+  FAILED
+}
+
+model ExtractedMember {
+  id            String          @id @default(uuid())
+  extraction_id String
+  extraction    GroupExtraction @relation(fields: [extraction_id], references: [id], onDelete: Cascade)
+  jid           String
+  phone         String
+  display_name  String?
+  is_admin      Boolean         @default(false)
+  created_at    DateTime        @default(now())
+
+  @@unique([extraction_id, jid])
+  @@index([extraction_id])
+}
+
+// ── Adição: escolhe uma extração + grupo destino, adiciona em lotes ──
+model GroupAddJob {
+  id                  String          @id @default(uuid())
+  nome                String
+  tenant_id           String
+  tenant              Tenant          @relation(fields: [tenant_id], references: [id])
+  extraction_id       String
+  extraction          GroupExtraction @relation(fields: [extraction_id], references: [id])
+  dest_instance_id    String
+  dest_instance       Instance        @relation("InstanceAddJobs", fields: [dest_instance_id], references: [id])
+  dest_group_jid      String
+  dest_group_name     String          @default("")
+  per_run_limit       Int             @default(50)
+  daily_add_cap       Int             @default(50)
+  delay_min_s         Int             @default(30)
+  delay_max_s         Int             @default(90)
+  send_invite_on_fail Boolean         @default(false)
+  added_count         Int             @default(0)
+  failed_count        Int             @default(0)
+  skipped_count       Int             @default(0)
+  added_today         Int             @default(0)
+  last_reset_at       DateTime        @default(now())
+  status              AddJobStatus    @default(IDLE)
+  last_run_at         DateTime?
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
+
+  targets AddTarget[]
+
+  @@index([tenant_id])
+  @@index([status])
+}
+
+enum AddJobStatus {
+  IDLE
+  RUNNING
+  PAUSED
   COMPLETED
   FAILED
-  PAUSED
 }
 
-model GroupSyncParticipant {
-  id         String               @id @default(uuid())
-  sync_id    String
-  sync       GroupSync            @relation(fields: [sync_id], references: [id], onDelete: Cascade)
-  jid        String
+model AddTarget {
+  id         String          @id @default(uuid())
+  job_id     String
+  job        GroupAddJob     @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  member_jid String
   phone      String
-  status     ParticipantAddStatus @default(PENDING)
-  attempts   Int                  @default(0)
+  status     AddTargetStatus @default(PENDING)
+  attempts   Int             @default(0)
   error      String?
   added_at   DateTime?
-  created_at DateTime             @default(now())
+  created_at DateTime        @default(now())
 
-  @@unique([sync_id, jid])
-  @@index([sync_id, status])
+  @@unique([job_id, member_jid])
+  @@index([job_id, status])
 }
 
-enum ParticipantAddStatus {
+enum AddTargetStatus {
   PENDING
   PROCESSING
   DONE
   FAILED
   SKIPPED
+  INVITED
 }
