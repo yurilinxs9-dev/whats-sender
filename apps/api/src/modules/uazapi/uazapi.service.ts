@@ -333,13 +333,14 @@ export class UazApiService {
   }
 
   // UazAPI: PUT /group/participants { groupId, action: "add", participants: [{id}] }
+  // POST devolve 405 Method Not Allowed — o verbo precisa ser PUT.
   async addGroupParticipants(
     instanceToken: string,
     groupJid: string,
     participantJids: string[],
   ): Promise<UazApiAddParticipantsResult> {
     const res = await this.request('/group/participants', {
-      method: 'POST',
+      method: 'PUT',
       tokenType: 'instance',
       token: instanceToken,
       body: {
@@ -415,7 +416,7 @@ export class UazApiService {
   private async request(
     path: string,
     opts: {
-      method: 'GET' | 'POST' | 'DELETE';
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE';
       tokenType: 'admin' | 'instance';
       token?: string;
       body?: Record<string, unknown>;

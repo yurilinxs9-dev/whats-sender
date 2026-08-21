@@ -248,6 +248,25 @@ export class GroupsService {
     return { queued: pending.length };
   }
 
+  // Devolve alvos FAILED para PENDING (ex.: falha por bug de integracao, nao por bloqueio).
+  async retryFailedTargets(tenantId: string, id: string) {
+    const job = await this.assertAddJob(tenantId, id);
+    if (job.status === 'RUNNING') throw new BadRequestException('Pause o job antes de re-tentar');
+
+    const { count } = await this.prisma.addTarget.updateMany({
+      where: { job_id: id, status: 'FAILED' },
+      data: { status: 'PENDING', attempts: 0, error: null },
+    });
+    if (count === 0) throw new BadRequestException('Nenhum alvo falhado para re-tentar');
+
+    await this.prisma.groupAddJob.update({
+      where: { id },
+      data: { failed_count: Math.max(0, job.failed_count - count), status: 'IDLE' },
+    });
+    this.gateway.emitAddJobProgress(id, { status: 'IDLE', retried: count }, tenantId);
+    return { retried: count };
+  }
+
   async pauseAddJob(tenantId: string, id: string) {
     await this.assertAddJob(tenantId, id);
     const updated = await this.prisma.groupAddJob.update({ where: { id }, data: { status: 'PAUSED' } });

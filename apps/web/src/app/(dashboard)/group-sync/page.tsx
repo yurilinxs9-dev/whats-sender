@@ -454,6 +454,16 @@ function AddJobsTab() {
     catch (e) { toast.error(errMsg(e, 'Erro ao rodar')); }
     finally { setBusy(null); }
   }
+  async function retryFailed(id: string) {
+    setBusy(id + ':retry');
+    try {
+      const { data } = await api.post<{ retried: number }>(`/groups/add-jobs/${id}/retry-failed`, {});
+      toast.success(`${data.retried} alvos voltaram para a fila`);
+      fetchItems();
+    }
+    catch (e) { toast.error(errMsg(e, 'Erro ao re-tentar')); }
+    finally { setBusy(null); }
+  }
   async function pause(id: string) {
     setBusy(id + ':pause');
     try { await api.post(`/groups/add-jobs/${id}/pause`); toast.success('Pausado'); fetchItems(); }
@@ -519,6 +529,7 @@ function AddJobsTab() {
                       <div className="flex items-center gap-2 shrink-0">
                         <Button size="sm" variant="outline" onClick={() => openReport(j.id)} className="gap-1.5"><FileBarChart className="h-3 w-3" />Relatório</Button>
                         {canRun && <Button size="sm" onClick={() => run(j.id)} disabled={busy === j.id + ':run'} className="gap-1.5">{busy === j.id + ':run' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}Rodar lote</Button>}
+                        {j.failed_count > 0 && j.status !== 'RUNNING' && <Button size="sm" variant="outline" onClick={() => retryFailed(j.id)} disabled={busy === j.id + ':retry'} className="gap-1.5">{busy === j.id + ':retry' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}Re-tentar falhas</Button>}
                         {canPause && <Button size="sm" variant="outline" onClick={() => pause(j.id)} disabled={busy === j.id + ':pause'} className="gap-1.5">{busy === j.id + ':pause' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}Pausar</Button>}
                         <Button size="sm" variant="ghost" onClick={() => del(j.id, j.nome)} className="text-danger hover:text-danger hover:bg-danger/10"><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>

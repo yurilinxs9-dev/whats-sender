@@ -89,6 +89,11 @@ export class GroupsController {
     return this.groupsService.runAddJob(req.user.tenantId, id, parsed.data.limit);
   }
 
+  @Post('add-jobs/:id/retry-failed')
+  retryFailed(@Req() req: Req, @Param('id') id: string) {
+    return this.service.retryFailedTargets(req.user.tenantId, id);
+  }
+
   @Post('add-jobs/:id/pause')
   @HttpCode(HttpStatus.OK)
   pauseAddJob(@Req() req: Req, @Param('id') id: string) {
