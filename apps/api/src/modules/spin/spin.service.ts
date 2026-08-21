@@ -12,9 +12,13 @@ export class SpinService {
   /**
    * Resolve all spin syntax in content, picking random variants.
    * Handles flat spin groups: {A|B|C} -> picks one at random.
+   *
+   * Exige o `|`: sem isso o regex casava com o miolo de {{nome}} e devolvia
+   * {nome}, que replaceVariables (que procura {{nome}}) ja nao reconhecia —
+   * a variavel ia literal para o cliente.
    */
   resolveSpin(content: string): string {
-    return content.replace(/\{([^{}]+)\}/g, (_, group: string) => {
+    return content.replace(/\{([^{}]*\|[^{}]*)\}/g, (_, group: string) => {
       const options = group.split('|');
       return options[Math.floor(Math.random() * options.length)];
     });
@@ -23,10 +27,7 @@ export class SpinService {
   /**
    * Replace variables: {{nome}}, {{telefone}}, {{email}}, etc.
    */
-  resolveVariables(
-    content: string,
-    variables: Record<string, string>,
-  ): string {
+  resolveVariables(content: string, variables: Record<string, string>): string {
     return content.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
       return variables[key] ?? '';
     });
@@ -68,10 +69,7 @@ export class SpinService {
    * Full spin pipeline:
    * resolve spin -> resolve variables -> fingerprint -> vary punctuation
    */
-  processMessage(
-    content: string,
-    variables: Record<string, string>,
-  ): string {
+  processMessage(content: string, variables: Record<string, string>): string {
     let result = this.resolveSpin(content);
     result = this.resolveVariables(result, variables);
     result = this.addZeroWidthFingerprint(result);
