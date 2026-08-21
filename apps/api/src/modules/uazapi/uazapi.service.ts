@@ -332,40 +332,68 @@ export class UazApiService {
     };
   }
 
-  // UazAPI: PUT /group/participants { groupId, action: "add", participants: [{id}] }
-  // POST devolve 405 Method Not Allowed — o verbo precisa ser PUT.
+  // UazAPI: POST /group/updateParticipants (case-sensitive).
+  // /group/participants so aceita GET — era ele que devolvia 405.
+  // Rotas confirmadas por OPTIONS neste host: updateParticipants, join,
+  // create, list, info, inviteInfo, leave, updateName.
   async addGroupParticipants(
     instanceToken: string,
     groupJid: string,
     participantJids: string[],
   ): Promise<UazApiAddParticipantsResult> {
-    const res = await this.request('/group/participants', {
-      method: 'PUT',
+    const res = await this.request('/group/updateParticipants', {
+      method: 'POST',
       tokenType: 'instance',
       token: instanceToken,
       body: {
-        groupId: groupJid,
+        groupjid: groupJid,
         action: 'add',
-        participants: participantJids.map((id) => ({ id })),
+        participants: participantJids,
       },
     });
-    const data = (await res.json()) as Record<string, unknown>;
-    if (!res.ok) {
-      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
-      throw new Error(`UazAPI addGroupParticipants failed: ${msg}`);
+    const raw = await res.text();
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      data = {};
     }
-    const added = Array.isArray(data.add)
-      ? (data.add as Record<string, unknown>[]).map((r) => ({
-          jid: r.jid as string,
-          status: r.status as string,
-        }))
-      : [];
-    const failed = Array.isArray(data.failed)
-      ? (data.failed as Record<string, unknown>[]).map((r) => ({
-          jid: r.jid as string,
-          status: r.status as string,
-        }))
-      : [];
+    if (!res.ok) {
+      // Corpo cru no erro: o formato exato do payload ainda nao foi validado
+      // contra uma adicao real, e a mensagem da API e quem diz o que falta.
+      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      throw new Error(`UazAPI addGroupParticipants failed: ${msg} — resposta: ${raw.slice(0, 300)}`);
+    }
+    // A resposta varia por versao: {add,failed}, {added,failed} ou uma lista
+    // solta de resultados. Normaliza as tres antes de decidir sucesso.
+    const pick = (...keys: string[]): Record<string, unknown>[] => {
+      for (const k of keys) {
+        if (Array.isArray(data[k])) return data[k] as Record<string, unknown>[];
+      }
+      return [];
+    };
+    const norm = (r: Record<string, unknown>) => ({
+      jid: (r.jid ?? r.id ?? r.participant ?? '') as string,
+      status: String(r.status ?? r.code ?? ''),
+    });
+
+    let added = pick('add', 'added', 'participants').map(norm);
+    let failed = pick('failed', 'errors').map(norm);
+
+    // Lista solta: separa pelo status de cada item.
+    if (added.length === 0 && failed.length === 0 && Array.isArray(data)) {
+      const all = (data as Record<string, unknown>[]).map(norm);
+      added = all.filter((r) => r.status === '200' || r.status === 'success');
+      failed = all.filter((r) => !(r.status === '200' || r.status === 'success'));
+    }
+
+    if (added.length === 0 && failed.length === 0) {
+      // Nao reconhecido: falhar alto com o corpo cru e melhor que reportar
+      // sucesso falso — o alvo pode ser re-tentado pelo painel.
+      throw new Error(
+        `UazAPI addGroupParticipants: resposta em formato desconhecido — ${raw.slice(0, 300)}`,
+      );
+    }
     return { added, failed };
   }
 
