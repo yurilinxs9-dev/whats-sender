@@ -22,8 +22,18 @@ import {
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -39,7 +49,13 @@ const menuItems = [
   { label: 'Configuracoes', icon: Settings, href: '/settings' },
 ];
 
-function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => void }) {
+function SidebarContent({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle?: () => void;
+}) {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
 
@@ -60,7 +76,11 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
             onClick={onToggle}
             className="ml-auto rounded-md p-1.5 text-text-secondary hover:bg-surface hover:text-text-primary transition-colors"
           >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
           </button>
         )}
       </div>
@@ -71,7 +91,9 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
       <nav className="flex-1 space-y-1 px-3 py-4">
         <TooltipProvider delayDuration={0}>
           {menuItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            const isActive =
+              pathname === item.href ||
+              (item.href !== '/' && pathname.startsWith(item.href));
             const Icon = item.icon;
 
             const linkContent = (
@@ -86,7 +108,9 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
                   collapsed && 'justify-center px-2',
                 )}
               >
-                <Icon className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')} />
+                <Icon
+                  className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')}
+                />
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             );
@@ -133,8 +157,12 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-text-primary truncate">{user?.nome ?? 'Usuario'}</p>
-              <p className="text-xs text-text-secondary truncate">{user?.email ?? ''}</p>
+              <p className="text-sm font-medium text-text-primary truncate">
+                {user?.nome ?? 'Usuario'}
+              </p>
+              <p className="text-xs text-text-secondary truncate">
+                {user?.email ?? ''}
+              </p>
             </div>
             <button
               onClick={logout}
@@ -161,7 +189,10 @@ export function Sidebar() {
           collapsed ? 'w-[72px]' : 'w-64',
         )}
       >
-        <SidebarContent collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+        <SidebarContent
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((v) => !v)}
+        />
       </aside>
 
       {/* Mobile sidebar trigger */}

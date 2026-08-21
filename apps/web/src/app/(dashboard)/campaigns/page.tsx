@@ -119,19 +119,44 @@ interface CampaignsResponse {
 }
 
 // ─── Status Helpers ─────────────────────────────────
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning'; className?: string }> = {
+const STATUS_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning';
+    className?: string;
+  }
+> = {
   DRAFT: { label: 'Rascunho', variant: 'secondary' },
   VALIDATING: { label: 'Validando', variant: 'warning' },
-  SCHEDULED: { label: 'Agendada', variant: 'outline', className: 'border-blue-500 text-blue-400' },
-  RUNNING: { label: 'Em Execucao', variant: 'default', className: 'animate-pulse' },
-  PAUSED: { label: 'Pausada', variant: 'warning', className: 'bg-orange-500 text-zinc-950 border-transparent' },
+  SCHEDULED: {
+    label: 'Agendada',
+    variant: 'outline',
+    className: 'border-blue-500 text-blue-400',
+  },
+  RUNNING: {
+    label: 'Em Execucao',
+    variant: 'default',
+    className: 'animate-pulse',
+  },
+  PAUSED: {
+    label: 'Pausada',
+    variant: 'warning',
+    className: 'bg-orange-500 text-zinc-950 border-transparent',
+  },
   COMPLETED: { label: 'Concluida', variant: 'default' },
-  CANCELLED: { label: 'Cancelada', variant: 'secondary', className: 'bg-zinc-600 text-zinc-200 border-transparent' },
+  CANCELLED: {
+    label: 'Cancelada',
+    variant: 'secondary',
+    className: 'bg-zinc-600 text-zinc-200 border-transparent',
+  },
   FAILED: { label: 'Falhou', variant: 'destructive' },
 };
 
 function getStatusConfig(status: string) {
-  return STATUS_CONFIG[status] ?? { label: status, variant: 'outline' as const };
+  return (
+    STATUS_CONFIG[status] ?? { label: status, variant: 'outline' as const }
+  );
 }
 
 function pct(part: number, total: number): string {
@@ -157,7 +182,9 @@ export default function CampaignsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
+    null,
+  );
 
   // Create form
   const [formNome, setFormNome] = useState('');
@@ -172,7 +199,9 @@ export default function CampaignsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Message mode
-  const [messageMode, setMessageMode] = useState<'template' | 'inline'>('template');
+  const [messageMode, setMessageMode] = useState<'template' | 'inline'>(
+    'template',
+  );
   const [formInlineMessage, setFormInlineMessage] = useState('');
 
   // TXT import mode
@@ -197,11 +226,16 @@ export default function CampaignsPage() {
   const fetchCampaigns = useCallback(async () => {
     try {
       setLoading(true);
-      const params: Record<string, string> = { page: String(page), limit: '20' };
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: '20',
+      };
       if (search) params.search = search;
       if (statusFilter !== 'all') params.status = statusFilter;
 
-      const { data } = await api.get<CampaignsResponse>('/campaigns', { params });
+      const { data } = await api.get<CampaignsResponse>('/campaigns', {
+        params,
+      });
       setCampaigns(data.campaigns);
       setTotal(data.total);
     } catch {
@@ -219,9 +253,13 @@ export default function CampaignsPage() {
   const fetchDropdownData = useCallback(async () => {
     try {
       const [tplRes, clRes, instRes] = await Promise.all([
-        api.get<{ templates: TemplateRef[] }>('/templates', { params: { limit: '100' } }),
+        api.get<{ templates: TemplateRef[] }>('/templates', {
+          params: { limit: '100' },
+        }),
         api.get<ContactListRef[]>('/contacts/lists'),
-        api.get<{ instances: InstanceRef[] }>('/instances', { params: { limit: '100' } }),
+        api.get<{ instances: InstanceRef[] }>('/instances', {
+          params: { limit: '100' },
+        }),
       ]);
       setTemplates(tplRes.data.templates ?? []);
       setContactLists(Array.isArray(clRes.data) ? clRes.data : []);
@@ -283,7 +321,9 @@ export default function CampaignsPage() {
           list_name: txtListName,
         });
         listId = importResult.list.id;
-        toast.success(`${importResult.imported} numeros importados${importResult.invalid > 0 ? ` (${importResult.invalid} invalidos ignorados)` : ''}`);
+        toast.success(
+          `${importResult.imported} numeros importados${importResult.invalid > 0 ? ` (${importResult.invalid} invalidos ignorados)` : ''}`,
+        );
         setTxtImporting(false);
       }
 
@@ -295,12 +335,16 @@ export default function CampaignsPage() {
 
       const { data: created } = await api.post<Campaign>('/campaigns', {
         nome: formNome,
-        ...(messageMode === 'template' ? { template_id: formTemplateId } : { inline_message: formInlineMessage }),
+        ...(messageMode === 'template'
+          ? { template_id: formTemplateId }
+          : { inline_message: formInlineMessage }),
         contact_list_id: listId,
         instance_ids: formInstanceIds,
         delay_min: parseInt(formDelayMin, 10) || 8,
         delay_max: parseInt(formDelayMax, 10) || 20,
-        scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : undefined,
+        scheduled_at: formScheduledAt
+          ? new Date(formScheduledAt).toISOString()
+          : undefined,
         use_spin: formUseSpin,
         use_composing: formUseComposing,
       });
@@ -308,15 +352,21 @@ export default function CampaignsPage() {
       // Auto-start dispatch immediately (unless scheduled for later)
       if (!formScheduledAt) {
         try {
-          const { data: startResult } = await api.post<{ dispatched: number; skipped: number }>(
-            `/dispatch/campaigns/${created.id}/start`,
-          );
+          const { data: startResult } = await api.post<{
+            dispatched: number;
+            skipped: number;
+          }>(`/dispatch/campaigns/${created.id}/start`);
           toast.success(
             `Campanha iniciada! ${startResult.dispatched} mensagens na fila${startResult.skipped > 0 ? ` (${startResult.skipped} ignorados)` : ''}`,
           );
         } catch (startErr: unknown) {
-          const startError = startErr as { response?: { data?: { message?: string } } };
-          toast.error(startError.response?.data?.message ?? 'Campanha criada mas falhou ao iniciar disparo');
+          const startError = startErr as {
+            response?: { data?: { message?: string } };
+          };
+          toast.error(
+            startError.response?.data?.message ??
+              'Campanha criada mas falhou ao iniciar disparo',
+          );
         }
       } else {
         toast.success('Campanha agendada com sucesso');
@@ -365,7 +415,9 @@ export default function CampaignsPage() {
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message ?? 'Erro ao atualizar campanha');
+      toast.error(
+        error.response?.data?.message ?? 'Erro ao atualizar campanha',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -468,8 +520,10 @@ export default function CampaignsPage() {
   const canStart = (status: string) => status === 'DRAFT';
   const canPause = (status: string) => status === 'RUNNING';
   const canResume = (status: string) => status === 'PAUSED';
-  const canCancel = (status: string) => ['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(status);
-  const canDelete = (status: string) => ['DRAFT', 'CANCELLED', 'COMPLETED'].includes(status);
+  const canCancel = (status: string) =>
+    ['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(status);
+  const canDelete = (status: string) =>
+    ['DRAFT', 'CANCELLED', 'COMPLETED'].includes(status);
 
   const handleStartCampaign = async (campaign: Campaign) => {
     try {
@@ -502,7 +556,9 @@ export default function CampaignsPage() {
       const { data } = await api.post<{ requeued: number }>(
         `/dispatch/campaigns/${campaign.id}/resume`,
       );
-      toast.success(`Campanha retomada! ${data.requeued} mensagens reenfileiradas`);
+      toast.success(
+        `Campanha retomada! ${data.requeued} mensagens reenfileiradas`,
+      );
       fetchCampaigns();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
@@ -514,25 +570,36 @@ export default function CampaignsPage() {
   if (detailCampaign) {
     const c = detailCampaign;
     const statusCfg = getStatusConfig(c.status);
-    const sentPct = c.total_contacts > 0 ? Math.round((c.total_sent / c.total_contacts) * 100) : 0;
+    const sentPct =
+      c.total_contacts > 0
+        ? Math.round((c.total_sent / c.total_contacts) * 100)
+        : 0;
 
     return (
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setDetailCampaign(null)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setDetailCampaign(null)}
+          >
             <ArrowLeft className="h-5 w-5 text-text-secondary" />
           </Button>
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-text-primary">{c.nome}</h1>
-              <Badge variant={statusCfg.variant} className={statusCfg.className}>
+              <Badge
+                variant={statusCfg.variant}
+                className={statusCfg.className}
+              >
                 {statusCfg.label}
               </Badge>
             </div>
             <p className="text-sm text-text-secondary mt-1">
               Criada em {new Date(c.created_at).toLocaleDateString('pt-BR')}
-              {c.scheduled_at && ` | Agendada para ${new Date(c.scheduled_at).toLocaleString('pt-BR')}`}
+              {c.scheduled_at &&
+                ` | Agendada para ${new Date(c.scheduled_at).toLocaleString('pt-BR')}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -543,13 +610,21 @@ export default function CampaignsPage() {
               </Button>
             )}
             {canCancel(c.status) && (
-              <Button variant="outline" size="sm" onClick={() => openCancelDialog(c)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openCancelDialog(c)}
+              >
                 <XCircle className="mr-2 h-4 w-4" />
                 Cancelar
               </Button>
             )}
             {canDelete(c.status) && (
-              <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(c)}>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => openDeleteDialog(c)}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Excluir
               </Button>
@@ -561,7 +636,9 @@ export default function CampaignsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-text-secondary">Progresso de envio</span>
+              <span className="text-sm text-text-secondary">
+                Progresso de envio
+              </span>
               <span className="text-sm font-medium text-text-primary">
                 {c.total_sent}/{c.total_contacts} ({sentPct}%)
               </span>
@@ -584,14 +661,57 @@ export default function CampaignsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard icon={Users} label="Total Contatos" value={c.total_contacts} color="text-primary" />
-            <MetricCard icon={Mail} label="Enviados" value={c.total_sent} color="text-primary" />
-            <MetricCard icon={CheckCircle2} label="Entregues" value={c.total_delivered} color="text-primary" subtitle={pct(c.total_delivered, c.total_sent)} />
-            <MetricCard icon={Eye} label="Lidos" value={c.total_read} color="text-blue-400" subtitle={pct(c.total_read, c.total_sent)} />
-            <MetricCard icon={MessageSquare} label="Respondidos" value={c.total_replied} color="text-emerald-400" subtitle={pct(c.total_replied, c.total_sent)} />
-            <MetricCard icon={AlertTriangle} label="Falharam" value={c.total_failed} color="text-danger" />
-            <MetricCard icon={ShieldAlert} label="Bloqueados" value={c.total_blocked} color="text-orange-400" />
-            <MetricCard icon={UserX} label="Opt-out" value={c.total_optout} color="text-zinc-400" />
+            <MetricCard
+              icon={Users}
+              label="Total Contatos"
+              value={c.total_contacts}
+              color="text-primary"
+            />
+            <MetricCard
+              icon={Mail}
+              label="Enviados"
+              value={c.total_sent}
+              color="text-primary"
+            />
+            <MetricCard
+              icon={CheckCircle2}
+              label="Entregues"
+              value={c.total_delivered}
+              color="text-primary"
+              subtitle={pct(c.total_delivered, c.total_sent)}
+            />
+            <MetricCard
+              icon={Eye}
+              label="Lidos"
+              value={c.total_read}
+              color="text-blue-400"
+              subtitle={pct(c.total_read, c.total_sent)}
+            />
+            <MetricCard
+              icon={MessageSquare}
+              label="Respondidos"
+              value={c.total_replied}
+              color="text-emerald-400"
+              subtitle={pct(c.total_replied, c.total_sent)}
+            />
+            <MetricCard
+              icon={AlertTriangle}
+              label="Falharam"
+              value={c.total_failed}
+              color="text-danger"
+            />
+            <MetricCard
+              icon={ShieldAlert}
+              label="Bloqueados"
+              value={c.total_blocked}
+              color="text-orange-400"
+            />
+            <MetricCard
+              icon={UserX}
+              label="Opt-out"
+              value={c.total_optout}
+              color="text-zinc-400"
+            />
           </div>
         )}
 
@@ -601,17 +721,27 @@ export default function CampaignsPage() {
             <CardContent className="p-4 space-y-3">
               <h3 className="font-semibold text-text-primary">Mensagem</h3>
               <div>
-                <p className="text-sm text-text-primary">{c.template?.nome ?? 'Mensagem direta'}</p>
-                <Badge variant="outline" className="mt-1 text-xs">{c.template?.type ?? 'INLINE'}</Badge>
+                <p className="text-sm text-text-primary">
+                  {c.template?.nome ?? 'Mensagem direta'}
+                </p>
+                <Badge variant="outline" className="mt-1 text-xs">
+                  {c.template?.type ?? 'INLINE'}
+                </Badge>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 space-y-3">
-              <h3 className="font-semibold text-text-primary">Lista de Contatos</h3>
+              <h3 className="font-semibold text-text-primary">
+                Lista de Contatos
+              </h3>
               <div>
-                <p className="text-sm text-text-primary">{c.contact_list.nome}</p>
-                <p className="text-xs text-text-secondary">{c.contact_list.total_count} contatos</p>
+                <p className="text-sm text-text-primary">
+                  {c.contact_list.nome}
+                </p>
+                <p className="text-xs text-text-secondary">
+                  {c.contact_list.total_count} contatos
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -620,23 +750,35 @@ export default function CampaignsPage() {
         {/* Stealth Config */}
         <Card>
           <CardContent className="p-4 space-y-3">
-            <h3 className="font-semibold text-text-primary">Configuracao Stealth</h3>
+            <h3 className="font-semibold text-text-primary">
+              Configuracao Stealth
+            </h3>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-text-secondary block">Delay</span>
-                <span className="text-text-primary">{c.delay_min}s - {c.delay_max}s</span>
+                <span className="text-text-primary">
+                  {c.delay_min}s - {c.delay_max}s
+                </span>
               </div>
               <div>
                 <span className="text-text-secondary block">Content Spin</span>
-                <span className="text-text-primary">{c.use_spin ? 'Ativo' : 'Inativo'}</span>
+                <span className="text-text-primary">
+                  {c.use_spin ? 'Ativo' : 'Inativo'}
+                </span>
               </div>
               <div>
                 <span className="text-text-secondary block">Composing</span>
-                <span className="text-text-primary">{c.use_composing ? 'Ativo' : 'Inativo'}</span>
+                <span className="text-text-primary">
+                  {c.use_composing ? 'Ativo' : 'Inativo'}
+                </span>
               </div>
               <div>
-                <span className="text-text-secondary block">Pular invalidos</span>
-                <span className="text-text-primary">{c.skip_invalid ? 'Sim' : 'Nao'}</span>
+                <span className="text-text-secondary block">
+                  Pular invalidos
+                </span>
+                <span className="text-text-primary">
+                  {c.skip_invalid ? 'Sim' : 'Nao'}
+                </span>
               </div>
             </div>
           </CardContent>
@@ -650,10 +792,22 @@ export default function CampaignsPage() {
             </h3>
             <div className="space-y-2">
               {c.instances.map((ci) => (
-                <div key={ci.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                <div
+                  key={ci.id}
+                  className="flex items-center justify-between p-2 rounded-md bg-muted/50"
+                >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-text-primary">{ci.instance.nome}</span>
-                    <Badge variant={ci.instance.status === 'connected' ? 'default' : 'secondary'} className="text-xs">
+                    <span className="text-sm text-text-primary">
+                      {ci.instance.nome}
+                    </span>
+                    <Badge
+                      variant={
+                        ci.instance.status === 'connected'
+                          ? 'default'
+                          : 'secondary'
+                      }
+                      className="text-xs"
+                    >
                       {ci.instance.status}
                     </Badge>
                   </div>
@@ -696,7 +850,9 @@ export default function CampaignsPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Total</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.total}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.total}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -707,7 +863,9 @@ export default function CampaignsPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Rascunho</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.draft}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.draft}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -718,7 +876,9 @@ export default function CampaignsPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Em Execucao</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.running}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.running}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -729,7 +889,9 @@ export default function CampaignsPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Concluidas</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.completed}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.completed}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -743,10 +905,19 @@ export default function CampaignsPage() {
             placeholder="Buscar por nome..."
             className="pl-9"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        >
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filtrar status" />
           </SelectTrigger>
@@ -775,7 +946,9 @@ export default function CampaignsPage() {
         <Card>
           <CardContent className="p-12 flex flex-col items-center justify-center text-center">
             <Send className="h-12 w-12 text-text-secondary mb-4" />
-            <h3 className="text-lg font-semibold text-text-primary mb-1">Nenhuma campanha</h3>
+            <h3 className="text-lg font-semibold text-text-primary mb-1">
+              Nenhuma campanha
+            </h3>
             <p className="text-text-secondary mb-4">
               Crie sua primeira campanha de disparo.
             </p>
@@ -789,35 +962,52 @@ export default function CampaignsPage() {
         <div className="space-y-3">
           {campaigns.map((campaign) => {
             const statusCfg = getStatusConfig(campaign.status);
-            const sentPctVal = campaign.total_contacts > 0
-              ? Math.round((campaign.total_sent / campaign.total_contacts) * 100)
-              : 0;
+            const sentPctVal =
+              campaign.total_contacts > 0
+                ? Math.round(
+                    (campaign.total_sent / campaign.total_contacts) * 100,
+                  )
+                : 0;
 
             return (
-              <Card key={campaign.id} className="hover:border-border/80 transition-colors">
+              <Card
+                key={campaign.id}
+                className="hover:border-border/80 transition-colors"
+              >
                 <CardContent className="p-4">
                   <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                     {/* Name & Status */}
-                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openDetail(campaign)}>
+                    <div
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => openDetail(campaign)}
+                    >
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-text-primary truncate">
                           {campaign.nome}
                         </h3>
-                        <Badge variant={statusCfg.variant} className={statusCfg.className}>
+                        <Badge
+                          variant={statusCfg.variant}
+                          className={statusCfg.className}
+                        >
                           {statusCfg.label}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-text-secondary">
                         <span>{campaign.template?.nome ?? 'Msg direta'}</span>
                         <span>|</span>
-                        <span>{campaign.contact_list?.nome ?? '—'} ({campaign.contact_list?.total_count ?? 0})</span>
+                        <span>
+                          {campaign.contact_list?.nome ?? '—'} (
+                          {campaign.contact_list?.total_count ?? 0})
+                        </span>
                       </div>
                     </div>
 
                     {/* Metrics bar */}
                     <div className="w-48">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-text-secondary">Envio</span>
+                        <span className="text-xs text-text-secondary">
+                          Envio
+                        </span>
                         <span className="text-xs font-medium text-text-primary">
                           {campaign.total_sent}/{campaign.total_contacts}
                         </span>
@@ -829,23 +1019,32 @@ export default function CampaignsPage() {
                         />
                       </div>
                       <div className="flex gap-3 mt-1 text-xs text-text-secondary">
-                        <span>E {pct(campaign.total_delivered, campaign.total_sent)}</span>
-                        <span>L {pct(campaign.total_read, campaign.total_sent)}</span>
-                        <span>R {pct(campaign.total_replied, campaign.total_sent)}</span>
+                        <span>
+                          E {pct(campaign.total_delivered, campaign.total_sent)}
+                        </span>
+                        <span>
+                          L {pct(campaign.total_read, campaign.total_sent)}
+                        </span>
+                        <span>
+                          R {pct(campaign.total_replied, campaign.total_sent)}
+                        </span>
                       </div>
                     </div>
 
                     {/* Instances */}
                     <div className="text-center">
                       <Badge variant="outline" className="text-xs">
-                        {campaign.instances.length} instancia{campaign.instances.length !== 1 ? 's' : ''}
+                        {campaign.instances.length} instancia
+                        {campaign.instances.length !== 1 ? 's' : ''}
                       </Badge>
                     </div>
 
                     {/* Date */}
                     <div className="text-center">
                       <span className="text-xs text-text-secondary">
-                        {new Date(campaign.created_at).toLocaleDateString('pt-BR')}
+                        {new Date(campaign.created_at).toLocaleDateString(
+                          'pt-BR',
+                        )}
                       </span>
                     </div>
 
@@ -932,7 +1131,8 @@ export default function CampaignsPage() {
       {!loading && campaigns.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-text-secondary">
-            {total} campanha{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
+            {total} campanha{total !== 1 ? 's' : ''} encontrada
+            {total !== 1 ? 's' : ''}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -1008,7 +1208,10 @@ export default function CampaignsPage() {
                 </div>
 
                 {messageMode === 'template' ? (
-                  <Select value={formTemplateId} onValueChange={setFormTemplateId}>
+                  <Select
+                    value={formTemplateId}
+                    onValueChange={setFormTemplateId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um template" />
                     </SelectTrigger>
@@ -1024,12 +1227,16 @@ export default function CampaignsPage() {
                   <div className="space-y-1">
                     <textarea
                       className="w-full h-32 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
-                      placeholder={'Digite sua mensagem aqui...\n\nUse {nome} para personalizar com o nome do contato.'}
+                      placeholder={
+                        'Digite sua mensagem aqui...\n\nUse {nome} para personalizar com o nome do contato.'
+                      }
                       value={formInlineMessage}
                       onChange={(e) => setFormInlineMessage(e.target.value)}
                     />
                     <p className="text-xs text-text-secondary">
-                      Variaveis: <code className="text-primary">{'{nome}'}</code>, <code className="text-primary">{'{telefone}'}</code>
+                      Variaveis:{' '}
+                      <code className="text-primary">{'{nome}'}</code>,{' '}
+                      <code className="text-primary">{'{telefone}'}</code>
                     </p>
                   </div>
                 )}
@@ -1058,13 +1265,18 @@ export default function CampaignsPage() {
                 </div>
 
                 {contactMode === 'list' ? (
-                  <Select value={formContactListId} onValueChange={setFormContactListId}>
+                  <Select
+                    value={formContactListId}
+                    onValueChange={setFormContactListId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione uma lista" />
                     </SelectTrigger>
                     <SelectContent>
                       {contactLists.length === 0 ? (
-                        <SelectItem value="__empty" disabled>Nenhuma lista criada</SelectItem>
+                        <SelectItem value="__empty" disabled>
+                          Nenhuma lista criada
+                        </SelectItem>
                       ) : (
                         contactLists.map((cl) => (
                           <SelectItem key={cl.id} value={cl.id}>
@@ -1087,7 +1299,9 @@ export default function CampaignsPage() {
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="txt-numbers">Numeros (um por linha)</Label>
+                        <Label htmlFor="txt-numbers">
+                          Numeros (um por linha)
+                        </Label>
                         <label className="text-xs text-primary cursor-pointer hover:underline">
                           <input
                             type="file"
@@ -1101,19 +1315,27 @@ export default function CampaignsPage() {
                       <textarea
                         id="txt-numbers"
                         className="w-full h-32 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y font-mono"
-                        placeholder={"5531999999999\n5521988887777\n5511977776666"}
+                        placeholder={
+                          '5531999999999\n5521988887777\n5511977776666'
+                        }
                         value={txtNumbers}
                         onChange={(e) => setTxtNumbers(e.target.value)}
                       />
                       <p className="text-xs text-text-secondary">
-                        Formatos aceitos: <code className="text-primary">5531999999999</code>,{' '}
+                        Formatos aceitos:{' '}
+                        <code className="text-primary">5531999999999</code>,{' '}
                         <code className="text-primary">+55 31 99999-9999</code>,{' '}
-                        <code className="text-primary">31999999999</code>.
-                        O sistema adiciona o 55 automaticamente se necessario.
+                        <code className="text-primary">31999999999</code>. O
+                        sistema adiciona o 55 automaticamente se necessario.
                       </p>
                       {txtNumbers.trim() && (
                         <p className="text-xs text-text-secondary">
-                          {txtNumbers.split(/[\r\n,;]+/).filter((l) => l.trim()).length} linhas detectadas
+                          {
+                            txtNumbers
+                              .split(/[\r\n,;]+/)
+                              .filter((l) => l.trim()).length
+                          }{' '}
+                          linhas detectadas
                         </p>
                       )}
                     </div>
@@ -1129,10 +1351,15 @@ export default function CampaignsPage() {
 
               {/* Instance Multi-Select */}
               <div className="space-y-2">
-                <Label>Instancias * ({formInstanceIds.length} selecionada{formInstanceIds.length !== 1 ? 's' : ''})</Label>
+                <Label>
+                  Instancias * ({formInstanceIds.length} selecionada
+                  {formInstanceIds.length !== 1 ? 's' : ''})
+                </Label>
                 <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-surface p-2 space-y-1">
                   {instances.length === 0 ? (
-                    <p className="text-sm text-text-secondary p-2">Nenhuma instancia disponivel</p>
+                    <p className="text-sm text-text-secondary p-2">
+                      Nenhuma instancia disponivel
+                    </p>
                   ) : (
                     instances.map((inst) => (
                       <label
@@ -1146,9 +1373,15 @@ export default function CampaignsPage() {
                           className="h-4 w-4 rounded border-border bg-surface text-primary accent-[#22c55e]"
                         />
                         <div className="flex-1 flex items-center gap-2">
-                          <span className="text-sm text-text-primary">{inst.nome}</span>
+                          <span className="text-sm text-text-primary">
+                            {inst.nome}
+                          </span>
                           <Badge
-                            variant={inst.status === 'connected' ? 'default' : 'secondary'}
+                            variant={
+                              inst.status === 'connected'
+                                ? 'default'
+                                : 'secondary'
+                            }
                             className="text-xs"
                           >
                             {inst.status}
@@ -1196,7 +1429,9 @@ export default function CampaignsPage() {
                     onChange={(e) => setFormUseSpin(e.target.checked)}
                     className="h-4 w-4 rounded border-border bg-surface accent-[#22c55e]"
                   />
-                  <span className="text-sm text-text-primary">Content Spin</span>
+                  <span className="text-sm text-text-primary">
+                    Content Spin
+                  </span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1211,7 +1446,9 @@ export default function CampaignsPage() {
 
               {/* Scheduled At */}
               <div className="space-y-2">
-                <Label htmlFor="create-scheduled">Agendar para (opcional)</Label>
+                <Label htmlFor="create-scheduled">
+                  Agendar para (opcional)
+                </Label>
                 <Input
                   id="create-scheduled"
                   type="datetime-local"
@@ -1221,7 +1458,11 @@ export default function CampaignsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={submitting}>
+              <Button
+                variant="outline"
+                onClick={() => setCreateOpen(false)}
+                disabled={submitting}
+              >
                 Cancelar
               </Button>
               <Button
@@ -1229,8 +1470,12 @@ export default function CampaignsPage() {
                 disabled={
                   submitting ||
                   !formNome.trim() ||
-                  (messageMode === 'template' ? !formTemplateId : !formInlineMessage.trim()) ||
-                  (contactMode === 'list' ? !formContactListId : (!txtNumbers.trim() || !txtListName.trim())) ||
+                  (messageMode === 'template'
+                    ? !formTemplateId
+                    : !formInlineMessage.trim()) ||
+                  (contactMode === 'list'
+                    ? !formContactListId
+                    : !txtNumbers.trim() || !txtListName.trim()) ||
                   formInstanceIds.length === 0
                 }
               >
@@ -1288,7 +1533,9 @@ export default function CampaignsPage() {
                     onChange={(e) => setEditUseSpin(e.target.checked)}
                     className="h-4 w-4 rounded border-border bg-surface accent-[#22c55e]"
                   />
-                  <span className="text-sm text-text-primary">Content Spin</span>
+                  <span className="text-sm text-text-primary">
+                    Content Spin
+                  </span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1302,10 +1549,17 @@ export default function CampaignsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditOpen(false)} disabled={submitting}>
+              <Button
+                variant="outline"
+                onClick={() => setEditOpen(false)}
+                disabled={submitting}
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleEdit} disabled={submitting || !editNome.trim()}>
+              <Button
+                onClick={handleEdit}
+                disabled={submitting || !editNome.trim()}
+              >
                 {submitting ? 'Salvando...' : 'Salvar'}
               </Button>
             </DialogFooter>
@@ -1319,14 +1573,23 @@ export default function CampaignsPage() {
               <DialogTitle>Excluir Campanha</DialogTitle>
               <DialogDescription>
                 Tem certeza que deseja excluir a campanha{' '}
-                <strong>{selectedCampaign?.nome}</strong>? Esta acao nao pode ser desfeita.
+                <strong>{selectedCampaign?.nome}</strong>? Esta acao nao pode
+                ser desfeita.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={submitting}>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteOpen(false)}
+                disabled={submitting}
+              >
                 Cancelar
               </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={submitting}
+              >
                 {submitting ? 'Excluindo...' : 'Excluir'}
               </Button>
             </DialogFooter>
@@ -1341,14 +1604,23 @@ export default function CampaignsPage() {
               <DialogDescription>
                 Tem certeza que deseja cancelar a campanha{' '}
                 <strong>{selectedCampaign?.nome}</strong>?
-                {selectedCampaign?.status === 'RUNNING' && ' Os envios em andamento serao interrompidos.'}
+                {selectedCampaign?.status === 'RUNNING' &&
+                  ' Os envios em andamento serao interrompidos.'}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={submitting}>
+              <Button
+                variant="outline"
+                onClick={() => setCancelOpen(false)}
+                disabled={submitting}
+              >
                 Voltar
               </Button>
-              <Button variant="destructive" onClick={handleCancel} disabled={submitting}>
+              <Button
+                variant="destructive"
+                onClick={handleCancel}
+                disabled={submitting}
+              >
                 {submitting ? 'Cancelando...' : 'Confirmar Cancelamento'}
               </Button>
             </DialogFooter>
@@ -1382,8 +1654,12 @@ function MetricCard({
         <div>
           <p className="text-sm text-text-secondary">{label}</p>
           <div className="flex items-baseline gap-1">
-            <p className="text-2xl font-bold text-text-primary">{value.toLocaleString('pt-BR')}</p>
-            {subtitle && <span className="text-xs text-text-secondary">{subtitle}</span>}
+            <p className="text-2xl font-bold text-text-primary">
+              {value.toLocaleString('pt-BR')}
+            </p>
+            {subtitle && (
+              <span className="text-xs text-text-secondary">{subtitle}</span>
+            )}
           </div>
         </div>
       </CardContent>

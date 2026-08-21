@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Param,
-  Req,
-  HttpCode,
-} from '@nestjs/common';
+import { Controller, Post, Get, Param, Req, HttpCode } from '@nestjs/common';
 import { DispatchService } from './dispatch.service';
 import type { AuthUser } from '../../common/types/auth-user';
 

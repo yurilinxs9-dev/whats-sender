@@ -1,4 +1,12 @@
-import { Controller, Post, Body, Get, Req, Res, HttpCode } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Req,
+  Res,
+  HttpCode,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { Request, Response } from 'express';
@@ -23,9 +31,15 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
-  async login(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const { email, senha } = loginSchema.parse(body);
-    const { accessToken, refreshToken, user } = await this.authService.login(email, senha);
+    const { accessToken, refreshToken, user } = await this.authService.login(
+      email,
+      senha,
+    );
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
@@ -50,15 +64,20 @@ export class AuthController {
   @Public()
   @Post('register')
   @HttpCode(201)
-  async register(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+  async register(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const data = registerSchema.parse(body);
     const user = await this.authService.createUser(data);
-    const { accessToken, refreshToken } = await this.authService.generateTokens({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      tenant_id: user.tenant_id,
-    });
+    const { accessToken, refreshToken } = await this.authService.generateTokens(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        tenant_id: user.tenant_id,
+      },
+    );
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
@@ -74,10 +93,14 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(200)
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const token = req.cookies?.refresh_token;
     if (!token) throw new Error('No refresh token');
-    const { accessToken, refreshToken } = await this.authService.refreshToken(token);
+    const { accessToken, refreshToken } =
+      await this.authService.refreshToken(token);
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,

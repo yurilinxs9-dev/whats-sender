@@ -6,7 +6,13 @@ import { MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
 
@@ -49,7 +55,9 @@ export default function LoginPage() {
             <MessageSquare className="h-7 w-7 text-zinc-950" />
           </div>
           <div className="space-y-1 text-center">
-            <CardTitle className="text-2xl font-bold text-text-primary">WhatsApp Sender</CardTitle>
+            <CardTitle className="text-2xl font-bold text-text-primary">
+              WhatsApp Sender
+            </CardTitle>
             <CardDescription className="text-text-secondary">
               Enterprise Stealth Messaging Platform
             </CardDescription>
@@ -58,7 +66,10 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-text-secondary">
+              <label
+                htmlFor="email"
+                className="text-sm font-medium text-text-secondary"
+              >
                 Email
               </label>
               <Input
@@ -71,7 +82,10 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="senha" className="text-sm font-medium text-text-secondary">
+              <label
+                htmlFor="senha"
+                className="text-sm font-medium text-text-secondary"
+              >
                 Senha
               </label>
               <Input

@@ -25,8 +25,7 @@ export class HealthWorker extends WorkerHost {
     try {
       await this.healthMonitor.checkInstance(instanceId);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
         `Health check failed for instance ${instanceId}: ${message}`,
       );

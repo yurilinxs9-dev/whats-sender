@@ -53,46 +53,87 @@ export class GroupAddWorker extends WorkerHost {
       if (!addJob) return;
       const inviteToken = extractToken(addJob.dest_instance?.config);
       if (!inviteToken) {
-        await this.markTarget(targetId, 'FAILED', 'instância destino sem token UazAPI');
+        await this.markTarget(
+          targetId,
+          'FAILED',
+          'instância destino sem token UazAPI',
+        );
         return;
       }
-      const inviteTarget = await this.prisma.addTarget.findUnique({ where: { id: targetId } });
+      const inviteTarget = await this.prisma.addTarget.findUnique({
+        where: { id: targetId },
+      });
       if (!inviteTarget) return;
-      await this.sendInvite(addJob, inviteToken, inviteTarget.id, inviteTarget.phone || inviteTarget.member_jid);
+      await this.sendInvite(
+        addJob,
+        inviteToken,
+        inviteTarget.id,
+        inviteTarget.phone || inviteTarget.member_jid,
+      );
       await this.emitAndMaybeComplete(jobId, tenantId);
       return;
     }
-    if (!addJob || addJob.status === 'PAUSED' || addJob.status === 'FAILED' || addJob.status === 'COMPLETED') {
+    if (
+      !addJob ||
+      addJob.status === 'PAUSED' ||
+      addJob.status === 'FAILED' ||
+      addJob.status === 'COMPLETED'
+    ) {
       await this.markTarget(targetId, 'SKIPPED');
       return;
     }
 
     await this.resetDailyCountIfNeeded(jobId);
 
-    const fresh = await this.prisma.groupAddJob.findUnique({ where: { id: jobId } });
+    const fresh = await this.prisma.groupAddJob.findUnique({
+      where: { id: jobId },
+    });
     if (fresh && fresh.added_today >= fresh.daily_add_cap) {
-      this.logger.warn(`AddJob ${jobId} atingiu cap diário (${fresh.daily_add_cap}). Re-enfileira p/ amanhã.`);
+      this.logger.warn(
+        `AddJob ${jobId} atingiu cap diário (${fresh.daily_add_cap}). Re-enfileira p/ amanhã.`,
+      );
       await this.markTarget(targetId, 'PENDING');
       const msUntilMidnight = this.msUntilHour(DAILY_RESET_HOUR + 1);
-      throw Object.assign(new Error('daily_cap_reached'), { delay: msUntilMidnight });
+      throw Object.assign(new Error('daily_cap_reached'), {
+        delay: msUntilMidnight,
+      });
     }
 
-    const settings = await this.prisma.tenantSettings.findUnique({ where: { tenant_id: tenantId } });
-    if (settings && !this.isWithinSendWindow(settings.send_window_start, settings.send_window_end)) {
+    const settings = await this.prisma.tenantSettings.findUnique({
+      where: { tenant_id: tenantId },
+    });
+    if (
+      settings &&
+      !this.isWithinSendWindow(
+        settings.send_window_start,
+        settings.send_window_end,
+      )
+    ) {
       this.logger.log(`AddJob ${jobId} fora da janela de envio. Re-enfileira.`);
       await this.markTarget(targetId, 'PENDING');
       const msUntilWindow = this.msUntilWindowOpen(settings.send_window_start);
-      throw Object.assign(new Error('outside_send_window'), { delay: msUntilWindow });
+      throw Object.assign(new Error('outside_send_window'), {
+        delay: msUntilWindow,
+      });
     }
 
     const token = extractToken(addJob.dest_instance?.config);
     if (!token) {
-      await this.markTarget(targetId, 'FAILED', 'instância destino sem token UazAPI');
-      await this.prisma.groupAddJob.update({ where: { id: jobId }, data: { failed_count: { increment: 1 } } });
+      await this.markTarget(
+        targetId,
+        'FAILED',
+        'instância destino sem token UazAPI',
+      );
+      await this.prisma.groupAddJob.update({
+        where: { id: jobId },
+        data: { failed_count: { increment: 1 } },
+      });
       return;
     }
 
-    const target = await this.prisma.addTarget.findUnique({ where: { id: targetId } });
+    const target = await this.prisma.addTarget.findUnique({
+      where: { id: targetId },
+    });
     if (!target) return;
 
     await this.prisma.addTarget.update({
@@ -102,9 +143,15 @@ export class GroupAddWorker extends WorkerHost {
 
     try {
       const memberId = target.phone || target.member_jid;
-      const result = await this.uazapi.addGroupParticipants(token, addJob.dest_group_jid, [memberId]);
+      const result = await this.uazapi.addGroupParticipants(
+        token,
+        addJob.dest_group_jid,
+        [memberId],
+      );
 
-      const succeeded = result.added.some((r) => r.status === '200' || r.status === 'success');
+      const succeeded = result.added.some(
+        (r) => r.status === '200' || r.status === 'success',
+      );
       const errorStatus = result.failed[0]?.status;
 
       if (succeeded) {
@@ -114,7 +161,10 @@ export class GroupAddWorker extends WorkerHost {
         });
         await this.prisma.groupAddJob.update({
           where: { id: jobId },
-          data: { added_count: { increment: 1 }, added_today: { increment: 1 } },
+          data: {
+            added_count: { increment: 1 },
+            added_today: { increment: 1 },
+          },
         });
       } else {
         const reason = errorStatus ?? 'falha desconhecida';
@@ -131,7 +181,9 @@ export class GroupAddWorker extends WorkerHost {
 
       await this.emitAndMaybeComplete(jobId, tenantId);
     } catch (error) {
-      this.logger.error(`GroupAddWorker erro target ${targetId}: ${(error as Error).message}`);
+      this.logger.error(
+        `GroupAddWorker erro target ${targetId}: ${(error as Error).message}`,
+      );
       await this.markTarget(targetId, 'FAILED', (error as Error).message);
       await this.prisma.groupAddJob.update({
         where: { id: jobId },
@@ -163,7 +215,9 @@ export class GroupAddWorker extends WorkerHost {
         data: {
           status: 'INVITED',
           invited_at: new Date(),
-          ...(addFailureReason && { error: `${addFailureReason} — convite enviado` }),
+          ...(addFailureReason && {
+            error: `${addFailureReason} — convite enviado`,
+          }),
         },
       });
       await this.prisma.groupAddJob.update({
@@ -176,17 +230,26 @@ export class GroupAddWorker extends WorkerHost {
       await this.markTarget(
         targetId,
         'FAILED',
-        addFailureReason ? `${addFailureReason} — convite tambem falhou: ${msg}` : `convite falhou: ${msg}`,
+        addFailureReason
+          ? `${addFailureReason} — convite tambem falhou: ${msg}`
+          : `convite falhou: ${msg}`,
       );
     }
   }
 
   private async emitAndMaybeComplete(jobId: string, tenantId: string) {
-    const updated = await this.prisma.groupAddJob.findUnique({ where: { id: jobId } });
+    const updated = await this.prisma.groupAddJob.findUnique({
+      where: { id: jobId },
+    });
     if (!updated) return;
     this.gateway.emitAddJobProgress(
       jobId,
-      { added: updated.added_count, failed: updated.failed_count, skipped: updated.skipped_count, added_today: updated.added_today },
+      {
+        added: updated.added_count,
+        failed: updated.failed_count,
+        skipped: updated.skipped_count,
+        added_today: updated.added_today,
+      },
       tenantId,
     );
     const pending = await this.prisma.addTarget.count({
@@ -205,14 +268,17 @@ export class GroupAddWorker extends WorkerHost {
     await this.prisma.addTarget.update({
       where: { id },
       data: {
-        status: status as 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'SKIPPED' | 'INVITED',
+        status: status as
+          'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'SKIPPED' | 'INVITED',
         ...(error && { error }),
       },
     });
   }
 
   private async resetDailyCountIfNeeded(jobId: string) {
-    const job = await this.prisma.groupAddJob.findUnique({ where: { id: jobId } });
+    const job = await this.prisma.groupAddJob.findUnique({
+      where: { id: jobId },
+    });
     if (!job) return;
     const lastReset = job.last_reset_at;
     const now = new Date();

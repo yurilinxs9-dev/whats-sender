@@ -26,11 +26,11 @@ UazAPI ──POST──> Aggregator :4000 ──┬──> tracking-rm
 
 ## Portas na VPS
 
-| Sistema | Porta | Webhook | Secret |
-|---|---|---|---|
-| tracking-rm | 3010 | `/api/webhooks/whatsapp` | não |
-| disparador | 3003 | `/api/webhook/uazapi` | não |
-| crm | 3001 | `/api/webhook/.../:instanceId/:secret` | sim (por instância) |
+| Sistema     | Porta | Webhook                                | Secret              |
+| ----------- | ----- | -------------------------------------- | ------------------- |
+| tracking-rm | 3010  | `/api/webhooks/whatsapp`               | não                 |
+| disparador  | 3003  | `/api/webhook/uazapi`                  | não                 |
+| crm         | 3001  | `/api/webhook/.../:instanceId/:secret` | sim (por instância) |
 
 ## Deploy
 
@@ -49,8 +49,8 @@ docker logs -f uazapi-aggregator
    ```js
    const ROUTES = {
      'NOME-DA-INSTANCIA': [
-       'http://localhost:3010/api/webhooks/whatsapp',          // tracking
-       'http://localhost:3003/api/webhook/uazapi',             // disparador
+       'http://localhost:3010/api/webhooks/whatsapp', // tracking
+       'http://localhost:3003/api/webhook/uazapi', // disparador
        'http://localhost:3001/api/webhook/uazapi/<uuid>/<sec>', // crm (URL copiada)
      ],
    };

@@ -41,7 +41,9 @@ export class SenderGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.tenantId = tenantId;
       client.join(`user:${payload.sub}`);
       if (tenantId) client.join(`tenant:${tenantId}`);
-      this.logger.log(`Client connected: ${client.id} (user: ${payload.sub} tenant: ${tenantId})`);
+      this.logger.log(
+        `Client connected: ${client.id} (user: ${payload.sub} tenant: ${tenantId})`,
+      );
     } catch {
       client.disconnect();
     }
@@ -55,7 +57,11 @@ export class SenderGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return tenantId ? this.server.to(`tenant:${tenantId}`) : this.server;
   }
 
-  emitCampaignProgress(campaignId: string, data: Record<string, unknown>, tenantId?: string) {
+  emitCampaignProgress(
+    campaignId: string,
+    data: Record<string, unknown>,
+    tenantId?: string,
+  ) {
     this.toTenant(tenantId).emit('campaign:progress', { campaignId, ...data });
   }
 
@@ -63,19 +69,37 @@ export class SenderGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.toTenant(tenantId).emit('campaign:completed', { campaignId });
   }
 
-  emitInstanceStatusChanged(instanceName: string, status: string, tenantId?: string) {
-    this.toTenant(tenantId).emit('instance:status-changed', { instanceName, status });
+  emitInstanceStatusChanged(
+    instanceName: string,
+    status: string,
+    tenantId?: string,
+  ) {
+    this.toTenant(tenantId).emit('instance:status-changed', {
+      instanceName,
+      status,
+    });
   }
 
   emitHealthAlert(data: Record<string, unknown>, tenantId?: string) {
     this.toTenant(tenantId).emit('health:alert', data);
   }
 
-  emitExtractionProgress(extractionId: string, data: Record<string, unknown>, tenantId?: string) {
-    this.toTenant(tenantId).emit('extraction:progress', { extractionId, ...data });
+  emitExtractionProgress(
+    extractionId: string,
+    data: Record<string, unknown>,
+    tenantId?: string,
+  ) {
+    this.toTenant(tenantId).emit('extraction:progress', {
+      extractionId,
+      ...data,
+    });
   }
 
-  emitAddJobProgress(jobId: string, data: Record<string, unknown>, tenantId?: string) {
+  emitAddJobProgress(
+    jobId: string,
+    data: Record<string, unknown>,
+    tenantId?: string,
+  ) {
     this.toTenant(tenantId).emit('add-job:progress', { jobId, ...data });
   }
 

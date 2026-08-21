@@ -53,10 +53,10 @@ describe('SpinService', () => {
     });
 
     it('should replace multiple variables', () => {
-      const result = service.resolveVariables(
-        '{{nome}} - {{telefone}}',
-        { nome: 'Joao', telefone: '31999999999' },
-      );
+      const result = service.resolveVariables('{{nome}} - {{telefone}}', {
+        nome: 'Joao',
+        telefone: '31999999999',
+      });
       expect(result).toBe('Joao - 31999999999');
     });
   });
@@ -71,10 +71,9 @@ describe('SpinService', () => {
 
   describe('processMessage', () => {
     it('should return a non-empty string', () => {
-      const result = service.processMessage(
-        '{Ola|Ei} {{nome}}!',
-        { nome: 'Ana' },
-      );
+      const result = service.processMessage('{Ola|Ei} {{nome}}!', {
+        nome: 'Ana',
+      });
       expect(result.length).toBeGreaterThan(0);
       expect(result).toContain('Ana');
     });

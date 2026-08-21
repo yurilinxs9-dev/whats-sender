@@ -27,7 +27,14 @@ export class ContactsService {
 
   // ─── Contacts ───────────────────────────────────────
 
-  async listContacts({ tenantId, page, limit, search, engagement, listId }: ListContactsParams) {
+  async listContacts({
+    tenantId,
+    page,
+    limit,
+    search,
+    engagement,
+    listId,
+  }: ListContactsParams) {
     const where: Record<string, unknown> = { tenant_id: tenantId };
 
     if (search) {
@@ -53,7 +60,13 @@ export class ContactsService {
       this.prisma.contact.count({ where }),
     ]);
 
-    return { contacts, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      contacts,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOneContact(id: string, tenantId: string) {
@@ -76,9 +89,12 @@ export class ContactsService {
 
   async createContact(data: CreateContactDto, tenantId: string) {
     const existing = await this.prisma.contact.findUnique({
-      where: { telefone_tenant_id: { telefone: data.telefone, tenant_id: tenantId } },
+      where: {
+        telefone_tenant_id: { telefone: data.telefone, tenant_id: tenantId },
+      },
     });
-    if (existing) throw new ConflictException('Ja existe um contato com este telefone');
+    if (existing)
+      throw new ConflictException('Ja existe um contato com este telefone');
 
     return this.prisma.contact.create({
       data: {
@@ -100,7 +116,11 @@ export class ContactsService {
       skipDuplicates: true,
     });
 
-    return { imported: results.count, total: data.contacts.length, skipped: data.contacts.length - results.count };
+    return {
+      imported: results.count,
+      total: data.contacts.length,
+      skipped: data.contacts.length - results.count,
+    };
   }
 
   /**
@@ -109,7 +129,10 @@ export class ContactsService {
    */
   async importFromText(rawText: string, listName: string, tenantId: string) {
     // Parse numbers — strip everything except digits
-    const lines = rawText.split(/[\r\n,;]+/).map((l) => l.trim()).filter(Boolean);
+    const lines = rawText
+      .split(/[\r\n,;]+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
     const phones: string[] = [];
 
     for (const line of lines) {
@@ -178,9 +201,12 @@ export class ContactsService {
 
     if (data.telefone && data.telefone !== contact.telefone) {
       const existing = await this.prisma.contact.findUnique({
-        where: { telefone_tenant_id: { telefone: data.telefone, tenant_id: tenantId } },
+        where: {
+          telefone_tenant_id: { telefone: data.telefone, tenant_id: tenantId },
+        },
       });
-      if (existing) throw new ConflictException('Ja existe um contato com este telefone');
+      if (existing)
+        throw new ConflictException('Ja existe um contato com este telefone');
     }
 
     return this.prisma.contact.update({
@@ -206,10 +232,21 @@ export class ContactsService {
   async getContactStats(tenantId: string) {
     const [total, whatsappValid, warm, hot, blocked] = await Promise.all([
       this.prisma.contact.count({ where: { tenant_id: tenantId } }),
-      this.prisma.contact.count({ where: { tenant_id: tenantId, whatsapp_valid: true } }),
-      this.prisma.contact.count({ where: { tenant_id: tenantId, engagement: 'WARM' as ContactEngagement } }),
-      this.prisma.contact.count({ where: { tenant_id: tenantId, engagement: 'HOT' as ContactEngagement } }),
-      this.prisma.contact.count({ where: { tenant_id: tenantId, engagement: 'BLOCKED' as ContactEngagement } }),
+      this.prisma.contact.count({
+        where: { tenant_id: tenantId, whatsapp_valid: true },
+      }),
+      this.prisma.contact.count({
+        where: { tenant_id: tenantId, engagement: 'WARM' as ContactEngagement },
+      }),
+      this.prisma.contact.count({
+        where: { tenant_id: tenantId, engagement: 'HOT' as ContactEngagement },
+      }),
+      this.prisma.contact.count({
+        where: {
+          tenant_id: tenantId,
+          engagement: 'BLOCKED' as ContactEngagement,
+        },
+      }),
     ]);
 
     return { total, whatsappValid, engaged: warm + hot, blocked };
@@ -259,7 +296,11 @@ export class ContactsService {
     return { message: 'Lista removida com sucesso' };
   }
 
-  async addContactsToList(listId: string, contactIds: string[], tenantId: string) {
+  async addContactsToList(
+    listId: string,
+    contactIds: string[],
+    tenantId: string,
+  ) {
     const list = await this.prisma.contactList.findFirst({
       where: { id: listId, tenant_id: tenantId },
     });
@@ -293,7 +334,11 @@ export class ContactsService {
     return { added: result.count, total: totalCount };
   }
 
-  async removeContactsFromList(listId: string, contactIds: string[], tenantId: string) {
+  async removeContactsFromList(
+    listId: string,
+    contactIds: string[],
+    tenantId: string,
+  ) {
     const list = await this.prisma.contactList.findFirst({
       where: { id: listId, tenant_id: tenantId },
     });
@@ -318,7 +363,12 @@ export class ContactsService {
     return { removed: contactIds.length, total: totalCount };
   }
 
-  async getListContacts(listId: string, tenantId: string, page: number, limit: number) {
+  async getListContacts(
+    listId: string,
+    tenantId: string,
+    page: number,
+    limit: number,
+  ) {
     const list = await this.prisma.contactList.findFirst({
       where: { id: listId, tenant_id: tenantId },
     });
@@ -337,6 +387,12 @@ export class ContactsService {
     ]);
 
     const contacts = listContacts.map((lc) => lc.contact);
-    return { contacts, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      contacts,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }

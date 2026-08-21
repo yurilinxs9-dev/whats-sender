@@ -28,7 +28,9 @@ export class DailyResetService {
       try {
         await this.healthMonitor.checkInstance(inst.id);
       } catch (error) {
-        this.logger.warn(`Health check failed for ${inst.id}: ${error instanceof Error ? error.message : 'unknown'}`);
+        this.logger.warn(
+          `Health check failed for ${inst.id}: ${error instanceof Error ? error.message : 'unknown'}`,
+        );
       }
     }
   }

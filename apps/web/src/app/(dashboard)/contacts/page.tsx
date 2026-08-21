@@ -82,16 +82,32 @@ interface ContactList {
 }
 
 // ─── Engagement Helpers ─────────────────────────────
-const ENGAGEMENT_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning'; className?: string }> = {
+const ENGAGEMENT_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning';
+    className?: string;
+  }
+> = {
   UNKNOWN: { label: 'Desconhecido', variant: 'secondary' },
-  COLD: { label: 'Frio', variant: 'outline', className: 'border-blue-500 text-blue-400' },
+  COLD: {
+    label: 'Frio',
+    variant: 'outline',
+    className: 'border-blue-500 text-blue-400',
+  },
   WARM: { label: 'Morno', variant: 'warning' },
   HOT: { label: 'Quente', variant: 'default' },
   BLOCKED: { label: 'Bloqueado', variant: 'destructive' },
 };
 
 function getEngagementConfig(engagement: string) {
-  return ENGAGEMENT_CONFIG[engagement] ?? { label: engagement, variant: 'outline' as const };
+  return (
+    ENGAGEMENT_CONFIG[engagement] ?? {
+      label: engagement,
+      variant: 'outline' as const,
+    }
+  );
 }
 
 // ─── Main Page ──────────────────────────────────────
@@ -103,7 +119,12 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [engagementFilter, setEngagementFilter] = useState('all');
   const [page, setPage] = useState(1);
-  const [stats, setStats] = useState<ContactStats>({ total: 0, whatsappValid: 0, engaged: 0, blocked: 0 });
+  const [stats, setStats] = useState<ContactStats>({
+    total: 0,
+    whatsappValid: 0,
+    engaged: 0,
+    blocked: 0,
+  });
 
   // ─── Lists State ──────────────────────────────────
   const [lists, setLists] = useState<ContactList[]>([]);
@@ -140,7 +161,10 @@ export default function ContactsPage() {
   const fetchContacts = useCallback(async () => {
     try {
       setLoading(true);
-      const params: Record<string, string> = { page: String(page), limit: '20' };
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: '20',
+      };
       if (search) params.search = search;
       if (engagementFilter !== 'all') params.engagement = engagementFilter;
 
@@ -188,9 +212,12 @@ export default function ContactsPage() {
   const fetchListContacts = useCallback(async (listId: string, pg: number) => {
     try {
       setListContactsLoading(true);
-      const { data } = await api.get<ContactsResponse>(`/contacts/lists/${listId}/contacts`, {
-        params: { page: String(pg), limit: '20' },
-      });
+      const { data } = await api.get<ContactsResponse>(
+        `/contacts/lists/${listId}/contacts`,
+        {
+          params: { page: String(pg), limit: '20' },
+        },
+      );
       setListContacts(data.contacts);
       setListContactsTotal(data.total);
     } catch {
@@ -207,7 +234,12 @@ export default function ContactsPage() {
       await api.post('/contacts', {
         telefone: formTelefone,
         nome: formNome || undefined,
-        tags: formTags ? formTags.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
+        tags: formTags
+          ? formTags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : undefined,
       });
       toast.success('Contato criado com sucesso');
       setCreateOpen(false);
@@ -238,7 +270,12 @@ export default function ContactsPage() {
       await api.patch(`/contacts/${selectedContact.id}`, {
         nome: formNome || null,
         telefone: formTelefone,
-        tags: formTags ? formTags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        tags: formTags
+          ? formTags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [],
       });
       toast.success('Contato atualizado');
       setEditOpen(false);
@@ -295,11 +332,17 @@ export default function ContactsPage() {
         };
       });
 
-      const { data } = await api.post<{ imported: number; total: number; skipped: number }>('/contacts/import', {
+      const { data } = await api.post<{
+        imported: number;
+        total: number;
+        skipped: number;
+      }>('/contacts/import', {
         contacts: contactsToImport,
       });
 
-      toast.success(`${data.imported} contatos importados, ${data.skipped} duplicados ignorados`);
+      toast.success(
+        `${data.imported} contatos importados, ${data.skipped} duplicados ignorados`,
+      );
       setImportOpen(false);
       setImportText('');
       setImportPreview(0);
@@ -442,11 +485,23 @@ export default function ContactsPage() {
         <TabsContent value="contatos" className="space-y-6">
           {/* Actions */}
           <div className="flex items-center gap-2 justify-end">
-            <Button variant="outline" onClick={() => { setImportText(''); setImportPreview(0); setImportOpen(true); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportText('');
+                setImportPreview(0);
+                setImportOpen(true);
+              }}
+            >
               <Upload className="mr-2 h-4 w-4" />
               Importar
             </Button>
-            <Button onClick={() => { resetContactForm(); setCreateOpen(true); }}>
+            <Button
+              onClick={() => {
+                resetContactForm();
+                setCreateOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Novo Contato
             </Button>
@@ -461,7 +516,9 @@ export default function ContactsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-text-secondary">Total</p>
-                  <p className="text-2xl font-bold text-text-primary">{stats.total}</p>
+                  <p className="text-2xl font-bold text-text-primary">
+                    {stats.total}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -471,8 +528,12 @@ export default function ContactsPage() {
                   <CheckCircle2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-text-secondary">Validos WhatsApp</p>
-                  <p className="text-2xl font-bold text-text-primary">{stats.whatsappValid}</p>
+                  <p className="text-sm text-text-secondary">
+                    Validos WhatsApp
+                  </p>
+                  <p className="text-2xl font-bold text-text-primary">
+                    {stats.whatsappValid}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -483,7 +544,9 @@ export default function ContactsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-text-secondary">Engajados</p>
-                  <p className="text-2xl font-bold text-text-primary">{stats.engaged}</p>
+                  <p className="text-2xl font-bold text-text-primary">
+                    {stats.engaged}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -494,7 +557,9 @@ export default function ContactsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-text-secondary">Bloqueados</p>
-                  <p className="text-2xl font-bold text-text-primary">{stats.blocked}</p>
+                  <p className="text-2xl font-bold text-text-primary">
+                    {stats.blocked}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -508,10 +573,19 @@ export default function ContactsPage() {
                 placeholder="Buscar por nome ou telefone..."
                 className="pl-9"
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
               />
             </div>
-            <Select value={engagementFilter} onValueChange={(v) => { setEngagementFilter(v); setPage(1); }}>
+            <Select
+              value={engagementFilter}
+              onValueChange={(v) => {
+                setEngagementFilter(v);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Filtrar engajamento" />
               </SelectTrigger>
@@ -537,11 +611,18 @@ export default function ContactsPage() {
             <Card>
               <CardContent className="p-12 flex flex-col items-center justify-center text-center">
                 <Users className="h-12 w-12 text-text-secondary mb-4" />
-                <h3 className="text-lg font-semibold text-text-primary mb-1">Nenhum contato</h3>
+                <h3 className="text-lg font-semibold text-text-primary mb-1">
+                  Nenhum contato
+                </h3>
                 <p className="text-text-secondary mb-4">
                   Adicione ou importe contatos para comecar.
                 </p>
-                <Button onClick={() => { resetContactForm(); setCreateOpen(true); }}>
+                <Button
+                  onClick={() => {
+                    resetContactForm();
+                    setCreateOpen(true);
+                  }}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Novo Contato
                 </Button>
@@ -563,7 +644,10 @@ export default function ContactsPage() {
               {contacts.map((contact) => {
                 const engCfg = getEngagementConfig(contact.engagement);
                 return (
-                  <Card key={contact.id} className="hover:border-border/80 transition-colors">
+                  <Card
+                    key={contact.id}
+                    className="hover:border-border/80 transition-colors"
+                  >
                     <CardContent className="p-4">
                       <div className="flex flex-col lg:grid lg:grid-cols-[1fr_150px_120px_150px_100px_100px_80px] gap-4 lg:items-center">
                         {/* Name & Phone */}
@@ -579,7 +663,10 @@ export default function ContactsPage() {
 
                         {/* Engagement */}
                         <div>
-                          <Badge variant={engCfg.variant} className={engCfg.className}>
+                          <Badge
+                            variant={engCfg.variant}
+                            className={engCfg.className}
+                          >
                             {engCfg.label}
                           </Badge>
                         </div>
@@ -587,7 +674,11 @@ export default function ContactsPage() {
                         {/* Tags */}
                         <div className="flex flex-wrap gap-1">
                           {contact.tags.slice(0, 2).map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-xs">
+                            <Badge
+                              key={tag}
+                              variant="outline"
+                              className="text-xs"
+                            >
                               {tag}
                             </Badge>
                           ))}
@@ -601,7 +692,9 @@ export default function ContactsPage() {
                         {/* Last Contacted */}
                         <div className="text-sm text-text-secondary">
                           {contact.last_contacted
-                            ? new Date(contact.last_contacted).toLocaleDateString('pt-BR')
+                            ? new Date(
+                                contact.last_contacted,
+                              ).toLocaleDateString('pt-BR')
                             : 'Nunca'}
                         </div>
 
@@ -646,7 +739,8 @@ export default function ContactsPage() {
           {!loading && contacts.length > 0 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-text-secondary">
-                {total} contato{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
+                {total} contato{total !== 1 ? 's' : ''} encontrado
+                {total !== 1 ? 's' : ''}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -657,7 +751,9 @@ export default function ContactsPage() {
                 >
                   Anterior
                 </Button>
-                <span className="text-sm text-text-secondary">Pagina {page}</span>
+                <span className="text-sm text-text-secondary">
+                  Pagina {page}
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
@@ -677,7 +773,12 @@ export default function ContactsPage() {
         <TabsContent value="listas" className="space-y-6">
           {/* Actions */}
           <div className="flex items-center justify-end">
-            <Button onClick={() => { resetListForm(); setCreateListOpen(true); }}>
+            <Button
+              onClick={() => {
+                resetListForm();
+                setCreateListOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nova Lista
             </Button>
@@ -694,11 +795,18 @@ export default function ContactsPage() {
             <Card>
               <CardContent className="p-12 flex flex-col items-center justify-center text-center">
                 <List className="h-12 w-12 text-text-secondary mb-4" />
-                <h3 className="text-lg font-semibold text-text-primary mb-1">Nenhuma lista</h3>
+                <h3 className="text-lg font-semibold text-text-primary mb-1">
+                  Nenhuma lista
+                </h3>
                 <p className="text-text-secondary mb-4">
                   Crie listas para organizar seus contatos.
                 </p>
-                <Button onClick={() => { resetListForm(); setCreateListOpen(true); }}>
+                <Button
+                  onClick={() => {
+                    resetListForm();
+                    setCreateListOpen(true);
+                  }}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Nova Lista
                 </Button>
@@ -722,22 +830,31 @@ export default function ContactsPage() {
                           </h3>
                         </div>
                         {list.descricao && (
-                          <p className="text-sm text-text-secondary truncate">{list.descricao}</p>
+                          <p className="text-sm text-text-secondary truncate">
+                            {list.descricao}
+                          </p>
                         )}
                       </div>
 
                       <div className="flex items-center gap-6">
                         <div className="text-center">
                           <p className="text-xs text-text-secondary">Total</p>
-                          <p className="text-lg font-bold text-text-primary">{list.total_count}</p>
+                          <p className="text-lg font-bold text-text-primary">
+                            {list.total_count}
+                          </p>
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-text-secondary">Validos</p>
-                          <p className="text-lg font-bold text-primary">{list.valid_count}</p>
+                          <p className="text-lg font-bold text-primary">
+                            {list.valid_count}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Button
                           variant="ghost"
                           size="icon"
@@ -803,10 +920,17 @@ export default function ContactsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleCreate} disabled={submitting || !formTelefone.trim()}>
+            <Button
+              onClick={handleCreate}
+              disabled={submitting || !formTelefone.trim()}
+            >
               {submitting ? 'Criando...' : 'Criar Contato'}
             </Button>
           </DialogFooter>
@@ -849,10 +973,17 @@ export default function ContactsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleEdit} disabled={submitting || !formTelefone.trim()}>
+            <Button
+              onClick={handleEdit}
+              disabled={submitting || !formTelefone.trim()}
+            >
               {submitting ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
@@ -866,14 +997,25 @@ export default function ContactsPage() {
             <DialogTitle>Excluir Contato</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir o contato{' '}
-              <strong>{selectedContact?.nome ?? selectedContact?.telefone}</strong>? Esta acao nao pode ser desfeita.
+              <strong>
+                {selectedContact?.nome ?? selectedContact?.telefone}
+              </strong>
+              ? Esta acao nao pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={submitting}
+            >
               {submitting ? 'Excluindo...' : 'Excluir'}
             </Button>
           </DialogFooter>
@@ -886,7 +1028,8 @@ export default function ContactsPage() {
           <DialogHeader>
             <DialogTitle>Importar Contatos</DialogTitle>
             <DialogDescription>
-              Cole os contatos no formato: telefone,nome (um por linha). O nome e opcional.
+              Cole os contatos no formato: telefone,nome (um por linha). O nome
+              e opcional.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -899,16 +1042,26 @@ export default function ContactsPage() {
             {importPreview > 0 && (
               <p className="text-sm text-text-secondary">
                 <UserPlus className="inline h-4 w-4 mr-1" />
-                {importPreview} contato{importPreview !== 1 ? 's' : ''} para importar
+                {importPreview} contato{importPreview !== 1 ? 's' : ''} para
+                importar
               </p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setImportOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleImport} disabled={submitting || importPreview === 0}>
-              {submitting ? 'Importando...' : `Importar ${importPreview} contatos`}
+            <Button
+              onClick={handleImport}
+              disabled={submitting || importPreview === 0}
+            >
+              {submitting
+                ? 'Importando...'
+                : `Importar ${importPreview} contatos`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -944,10 +1097,17 @@ export default function ContactsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateListOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setCreateListOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleCreateList} disabled={submitting || !formListNome.trim()}>
+            <Button
+              onClick={handleCreateList}
+              disabled={submitting || !formListNome.trim()}
+            >
               {submitting ? 'Criando...' : 'Criar Lista'}
             </Button>
           </DialogFooter>
@@ -982,10 +1142,17 @@ export default function ContactsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditListOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setEditListOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleEditList} disabled={submitting || !formListNome.trim()}>
+            <Button
+              onClick={handleEditList}
+              disabled={submitting || !formListNome.trim()}
+            >
               {submitting ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
@@ -999,14 +1166,23 @@ export default function ContactsPage() {
             <DialogTitle>Excluir Lista</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir a lista{' '}
-              <strong>{editingList?.nome}</strong>? Os contatos nao serao removidos, apenas a associacao com a lista.
+              <strong>{editingList?.nome}</strong>? Os contatos nao serao
+              removidos, apenas a associacao com a lista.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteListOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteListOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDeleteList} disabled={submitting}>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteList}
+              disabled={submitting}
+            >
               {submitting ? 'Excluindo...' : 'Excluir'}
             </Button>
           </DialogFooter>
@@ -1032,7 +1208,9 @@ export default function ContactsPage() {
                 ))}
               </div>
             ) : listContacts.length === 0 ? (
-              <p className="text-center text-text-secondary py-8">Nenhum contato nesta lista</p>
+              <p className="text-center text-text-secondary py-8">
+                Nenhum contato nesta lista
+              </p>
             ) : (
               listContacts.map((contact) => (
                 <div
@@ -1043,7 +1221,9 @@ export default function ContactsPage() {
                     <p className="font-medium text-text-primary">
                       {contact.nome ?? 'Sem nome'}
                     </p>
-                    <p className="text-sm text-text-secondary">{contact.telefone}</p>
+                    <p className="text-sm text-text-secondary">
+                      {contact.telefone}
+                    </p>
                   </div>
                   <Button
                     variant="ghost"
@@ -1071,7 +1251,9 @@ export default function ContactsPage() {
               >
                 Anterior
               </Button>
-              <span className="text-sm text-text-secondary">Pagina {listContactsPage}</span>
+              <span className="text-sm text-text-secondary">
+                Pagina {listContactsPage}
+              </span>
               <Button
                 variant="outline"
                 size="sm"

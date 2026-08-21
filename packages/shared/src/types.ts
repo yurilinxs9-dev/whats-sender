@@ -37,7 +37,8 @@ export interface LoginResponse {
 // ============================================================
 // Instance
 // ============================================================
-export type InstanceStatus = 'connected' | 'disconnected' | 'connecting' | 'banned' | 'cooldown';
+export type InstanceStatus =
+  'connected' | 'disconnected' | 'connecting' | 'banned' | 'cooldown';
 
 export type WarmupPhase =
   | 'ACTIVATION'

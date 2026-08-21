@@ -65,13 +65,41 @@ interface WarmupLogsResponse {
 }
 
 // ---- Phase config ----
-const PHASE_CONFIG: Record<string, { label: string; color: string; maxMsgs: number; days: number }> = {
+const PHASE_CONFIG: Record<
+  string,
+  { label: string; color: string; maxMsgs: number; days: number }
+> = {
   ACTIVATION: { label: 'Ativacao', color: 'bg-blue-500', maxMsgs: 30, days: 2 },
-  BUILDING: { label: 'Construcao', color: 'bg-cyan-500', maxMsgs: 100, days: 3 },
-  ACCELERATION: { label: 'Aceleracao', color: 'bg-yellow-500', maxMsgs: 300, days: 4 },
-  STABILIZATION: { label: 'Estabilizacao', color: 'bg-orange-500', maxMsgs: 800, days: 5 },
-  PRODUCTION: { label: 'Producao', color: 'bg-green-500', maxMsgs: 1500, days: 7 },
-  FULL_CAPACITY: { label: 'Capacidade Total', color: 'bg-emerald-500', maxMsgs: 2000, days: -1 },
+  BUILDING: {
+    label: 'Construcao',
+    color: 'bg-cyan-500',
+    maxMsgs: 100,
+    days: 3,
+  },
+  ACCELERATION: {
+    label: 'Aceleracao',
+    color: 'bg-yellow-500',
+    maxMsgs: 300,
+    days: 4,
+  },
+  STABILIZATION: {
+    label: 'Estabilizacao',
+    color: 'bg-orange-500',
+    maxMsgs: 800,
+    days: 5,
+  },
+  PRODUCTION: {
+    label: 'Producao',
+    color: 'bg-green-500',
+    maxMsgs: 1500,
+    days: 7,
+  },
+  FULL_CAPACITY: {
+    label: 'Capacidade Total',
+    color: 'bg-emerald-500',
+    maxMsgs: 2000,
+    days: -1,
+  },
 };
 
 const PHASE_BADGE_CLASS: Record<string, string> = {
@@ -90,9 +118,17 @@ function getHealthColor(score: number) {
 }
 
 // ---- Progress Bar ----
-function ProgressBar({ value, className }: { value: number; className?: string }) {
+function ProgressBar({
+  value,
+  className,
+}: {
+  value: number;
+  className?: string;
+}) {
   return (
-    <div className={`h-1.5 rounded-full bg-muted overflow-hidden ${className ?? ''}`}>
+    <div
+      className={`h-1.5 rounded-full bg-muted overflow-hidden ${className ?? ''}`}
+    >
       <div
         className="h-full rounded-full bg-primary transition-all"
         style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
@@ -105,7 +141,9 @@ function ProgressBar({ value, className }: { value: number; className?: string }
 export default function WarmupPage() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedLogs, setExpandedLogs] = useState<Record<string, WarmupLog[]>>({});
+  const [expandedLogs, setExpandedLogs] = useState<Record<string, WarmupLog[]>>(
+    {},
+  );
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -164,9 +202,12 @@ export default function WarmupPage() {
     // Fetch logs if not cached
     if (!expandedLogs[instanceId]) {
       try {
-        const { data } = await api.get<WarmupLogsResponse>(`/warmup/${instanceId}/logs`, {
-          params: { limit: '10' },
-        });
+        const { data } = await api.get<WarmupLogsResponse>(
+          `/warmup/${instanceId}/logs`,
+          {
+            params: { limit: '10' },
+          },
+        );
         setExpandedLogs((prev) => ({ ...prev, [instanceId]: data.logs }));
       } catch {
         toast.error('Erro ao carregar logs');
@@ -181,10 +222,14 @@ export default function WarmupPage() {
   // ---- Stats ----
   const stats = {
     total: instances.length,
-    warming: instances.filter((i) => !i.warmup_completed && i.status === 'connected').length,
+    warming: instances.filter(
+      (i) => !i.warmup_completed && i.status === 'connected',
+    ).length,
     completed: instances.filter((i) => i.warmup_completed).length,
     avgHealth: instances.length
-      ? Math.round(instances.reduce((s, i) => s + i.health_score, 0) / instances.length)
+      ? Math.round(
+          instances.reduce((s, i) => s + i.health_score, 0) / instances.length,
+        )
       : 0,
   };
 
@@ -205,7 +250,9 @@ export default function WarmupPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Total</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.total}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.total}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -216,7 +263,9 @@ export default function WarmupPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Aquecendo</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.warming}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.warming}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -227,7 +276,9 @@ export default function WarmupPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Aquecidos</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.completed}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.completed}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -238,7 +289,9 @@ export default function WarmupPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Saude Media</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.avgHealth}%</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.avgHealth}%
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -255,9 +308,12 @@ export default function WarmupPage() {
         <Card>
           <CardContent className="p-12 flex flex-col items-center justify-center text-center">
             <Flame className="h-12 w-12 text-text-secondary mb-4" />
-            <h3 className="text-lg font-semibold text-text-primary mb-1">Nenhuma instancia</h3>
+            <h3 className="text-lg font-semibold text-text-primary mb-1">
+              Nenhuma instancia
+            </h3>
             <p className="text-text-secondary">
-              Crie instancias na pagina de Instancias para iniciar o aquecimento.
+              Crie instancias na pagina de Instancias para iniciar o
+              aquecimento.
             </p>
           </CardContent>
         </Card>
@@ -272,15 +328,23 @@ export default function WarmupPage() {
             };
             const badgeClass = PHASE_BADGE_CLASS[instance.warmup_phase] ?? '';
             const dailyTotal = instance.daily_sent + instance.buddy_sent_today;
-            const dailyProgress = phase.maxMsgs > 0 ? (dailyTotal / phase.maxMsgs) * 100 : 0;
-            const dayProgress = phase.days > 0 ? (instance.warmup_day / phase.days) * 100 : 100;
+            const dailyProgress =
+              phase.maxMsgs > 0 ? (dailyTotal / phase.maxMsgs) * 100 : 0;
+            const dayProgress =
+              phase.days > 0 ? (instance.warmup_day / phase.days) * 100 : 100;
             const isExpanded = expandedIds.has(instance.id);
             const isLoading = actionLoading === instance.id;
             const isConnected = instance.status === 'connected';
-            const isCooldown = !!(instance.cooldown_until && new Date(instance.cooldown_until) > new Date());
+            const isCooldown = !!(
+              instance.cooldown_until &&
+              new Date(instance.cooldown_until) > new Date()
+            );
 
             return (
-              <Card key={instance.id} className="hover:border-border/80 transition-colors">
+              <Card
+                key={instance.id}
+                className="hover:border-border/80 transition-colors"
+              >
                 <CardContent className="p-4 space-y-4">
                   {/* Main row */}
                   <div className="flex flex-col lg:flex-row lg:items-center gap-4">
@@ -328,7 +392,9 @@ export default function WarmupPage() {
                     {/* Daily progress */}
                     <div className="w-40">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-text-secondary">Envios Hoje</span>
+                        <span className="text-xs text-text-secondary">
+                          Envios Hoje
+                        </span>
                         <span className="text-xs font-medium text-text-primary">
                           {dailyTotal}/{phase.maxMsgs}
                         </span>
@@ -339,7 +405,9 @@ export default function WarmupPage() {
                     {/* Health */}
                     <div className="w-28">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-text-secondary">Saude</span>
+                        <span className="text-xs text-text-secondary">
+                          Saude
+                        </span>
                         <span className="text-xs font-medium text-text-primary">
                           {instance.health_score}%
                         </span>
@@ -399,7 +467,9 @@ export default function WarmupPage() {
                       {Object.entries(PHASE_CONFIG).map(([key, cfg]) => {
                         const isActive = key === instance.warmup_phase;
                         const phaseOrder = Object.keys(PHASE_CONFIG);
-                        const currentIdx = phaseOrder.indexOf(instance.warmup_phase);
+                        const currentIdx = phaseOrder.indexOf(
+                          instance.warmup_phase,
+                        );
                         const thisIdx = phaseOrder.indexOf(key);
                         const isPast = thisIdx < currentIdx;
 
@@ -440,30 +510,45 @@ export default function WarmupPage() {
                               key={log.id}
                               className="flex items-center gap-4 text-sm py-1.5 px-3 rounded-lg bg-muted/50 flex-wrap"
                             >
-                              <Badge className={PHASE_BADGE_CLASS[log.phase] ?? ''} variant="outline">
+                              <Badge
+                                className={PHASE_BADGE_CLASS[log.phase] ?? ''}
+                                variant="outline"
+                              >
                                 {PHASE_CONFIG[log.phase]?.label ?? log.phase}
                               </Badge>
-                              <span className="text-text-secondary">Dia {log.day}</span>
+                              <span className="text-text-secondary">
+                                Dia {log.day}
+                              </span>
                               <span className="text-text-primary">
                                 {log.msgs_sent}/{log.msgs_limit} msgs
                               </span>
                               {log.replies > 0 && (
-                                <span className="text-primary">{log.replies} respostas</span>
+                                <span className="text-primary">
+                                  {log.replies} respostas
+                                </span>
                               )}
                               {log.blocks > 0 && (
-                                <span className="text-danger">{log.blocks} bloqueios</span>
+                                <span className="text-danger">
+                                  {log.blocks} bloqueios
+                                </span>
                               )}
                               {log.notes && (
-                                <span className="text-text-secondary italic">{log.notes}</span>
+                                <span className="text-text-secondary italic">
+                                  {log.notes}
+                                </span>
                               )}
                               <span className="ml-auto text-xs text-text-secondary">
-                                {new Date(log.created_at).toLocaleDateString('pt-BR')}
+                                {new Date(log.created_at).toLocaleDateString(
+                                  'pt-BR',
+                                )}
                               </span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-sm text-text-secondary">Nenhum log encontrado.</p>
+                        <p className="text-sm text-text-secondary">
+                          Nenhum log encontrado.
+                        </p>
                       )}
                     </div>
                   )}

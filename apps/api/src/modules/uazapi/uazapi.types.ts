@@ -24,13 +24,13 @@ export interface UazApiCreateInstanceResult {
 }
 
 export interface UazApiGroup {
-  id: string;      // JID: 120363...@g.us
+  id: string; // JID: 120363...@g.us
   subject: string; // group name
   size: number;
 }
 
 export interface UazApiGroupParticipant {
-  id: string;   // JID: 5511999...@s.whatsapp.net
+  id: string; // JID: 5511999...@s.whatsapp.net
   admin: string | null;
 }
 

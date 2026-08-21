@@ -29,10 +29,14 @@ export const CreateAddJobSchema = z
     message: 'delay_max_s deve ser >= delay_min_s',
     path: ['delay_max_s'],
   })
-  .refine((d) => d.invite_message === undefined || d.invite_message.includes('{link}'), {
-    message: 'A mensagem precisa conter {link}',
-    path: ['invite_message'],
-  });
+  .refine(
+    (d) =>
+      d.invite_message === undefined || d.invite_message.includes('{link}'),
+    {
+      message: 'A mensagem precisa conter {link}',
+      path: ['invite_message'],
+    },
+  );
 export type CreateAddJobDto = z.infer<typeof CreateAddJobSchema>;
 
 // Disparar uma rodada de adição (respeita per_run_limit do job ou override)
@@ -53,14 +57,24 @@ export const UpdateAddJobSchema = z
     invite_link: z.string().url().max(300).nullable().optional(),
     invite_message: z.string().min(1).max(1000).optional(),
   })
-  .refine((d) => d.delay_min_s === undefined || d.delay_max_s === undefined || d.delay_max_s >= d.delay_min_s, {
-    message: 'delay_max_s deve ser >= delay_min_s',
-    path: ['delay_max_s'],
-  })
-  .refine((d) => d.invite_message === undefined || d.invite_message.includes('{link}'), {
-    message: 'A mensagem precisa conter {link}',
-    path: ['invite_message'],
-  });
+  .refine(
+    (d) =>
+      d.delay_min_s === undefined ||
+      d.delay_max_s === undefined ||
+      d.delay_max_s >= d.delay_min_s,
+    {
+      message: 'delay_max_s deve ser >= delay_min_s',
+      path: ['delay_max_s'],
+    },
+  )
+  .refine(
+    (d) =>
+      d.invite_message === undefined || d.invite_message.includes('{link}'),
+    {
+      message: 'A mensagem precisa conter {link}',
+      path: ['invite_message'],
+    },
+  );
 export type UpdateAddJobDto = z.infer<typeof UpdateAddJobSchema>;
 
 // Enviar convite manualmente. Sem target_ids = todos os alvos que falharam.

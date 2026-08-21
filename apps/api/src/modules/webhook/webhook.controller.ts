@@ -19,7 +19,9 @@ export class WebhookController {
   async handleUazApiWebhook(
     @Body() body: UazApiWebhookPayload,
   ): Promise<{ received: boolean }> {
-    this.logger.debug(`Webhook received: event=${body.event} messageId=${body.messageId ?? 'N/A'}`);
+    this.logger.debug(
+      `Webhook received: event=${body.event} messageId=${body.messageId ?? 'N/A'}`,
+    );
 
     try {
       switch (body.event) {
@@ -57,7 +59,9 @@ export class WebhookController {
       where: { whatsapp_msg_id: body.messageId },
     });
     if (!dispatch) {
-      this.logger.debug(`Delivery webhook: dispatch not found for messageId=${body.messageId}`);
+      this.logger.debug(
+        `Delivery webhook: dispatch not found for messageId=${body.messageId}`,
+      );
       return;
     }
 
@@ -80,7 +84,13 @@ export class WebhookController {
 
     const campaign = await this.prisma.campaign.findUnique({
       where: { id: dispatch.campaign_id },
-      select: { tenant_id: true, total_sent: true, total_contacts: true, total_delivered: true, total_failed: true },
+      select: {
+        tenant_id: true,
+        total_sent: true,
+        total_contacts: true,
+        total_delivered: true,
+        total_failed: true,
+      },
     });
     if (campaign) {
       this.gateway.emitCampaignProgress(
@@ -146,8 +156,7 @@ export class WebhookController {
     });
 
     // Upgrade contact engagement
-    const newEngagement =
-      dispatch.contact.times_replied >= 2 ? 'HOT' : 'WARM';
+    const newEngagement = dispatch.contact.times_replied >= 2 ? 'HOT' : 'WARM';
     await this.prisma.contact.update({
       where: { id: dispatch.contact_id },
       data: {
@@ -164,7 +173,11 @@ export class WebhookController {
         body.replyContent!.toLowerCase().trim().includes(kw),
       )
     ) {
-      await this.handleOptout(dispatch.campaign_id, dispatch.contact_id, dispatch.contact.telefone);
+      await this.handleOptout(
+        dispatch.campaign_id,
+        dispatch.contact_id,
+        dispatch.contact.telefone,
+      );
     }
 
     this.logger.debug(`Reply received: dispatch=${dispatch.id}`);
@@ -304,7 +317,9 @@ export class WebhookController {
       });
     }
 
-    this.logger.log(`Opt-out processed: contact=${contactId} campaign=${campaignId}`);
+    this.logger.log(
+      `Opt-out processed: contact=${contactId} campaign=${campaignId}`,
+    );
   }
 
   private async checkBlockRate(

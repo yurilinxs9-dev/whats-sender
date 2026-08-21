@@ -79,18 +79,35 @@ const ENGAGEMENT_COLORS: Record<string, string> = {
 };
 
 type DateRange = '7d' | '30d' | 'all';
-type SortKey = 'nome' | 'total_sent' | 'total_delivered' | 'total_read' | 'total_replied' | 'delivery_rate';
+type SortKey =
+  | 'nome'
+  | 'total_sent'
+  | 'total_delivered'
+  | 'total_read'
+  | 'total_replied'
+  | 'delivery_rate';
 type SortDir = 'asc' | 'desc';
 
 // ─── Custom Tooltip ─────────────────────────────────
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color?: string }>; label?: string }) {
+function ChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ value: number; name: string; color?: string }>;
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-lg">
       <p className="text-xs text-text-secondary mb-1">{label}</p>
       {payload.map((entry, i) => (
         <p key={i} className="text-sm text-text-primary">
-          <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: entry.color }} />
+          <span
+            className="inline-block w-2 h-2 rounded-full mr-1.5"
+            style={{ backgroundColor: entry.color }}
+          />
           {entry.name}: {entry.value.toLocaleString('pt-BR')}
         </p>
       ))}
@@ -125,7 +142,9 @@ export default function ReportsPage() {
   const fetchCampaigns = useCallback(async () => {
     try {
       setLoading(true);
-      const { data } = await api.get<CampaignsResponse>('/campaigns', { params: { limit: '200' } });
+      const { data } = await api.get<CampaignsResponse>('/campaigns', {
+        params: { limit: '200' },
+      });
       setCampaigns(data.campaigns);
     } catch {
       toast.error('Erro ao carregar campanhas');
@@ -149,7 +168,15 @@ export default function ReportsPage() {
 
   // ─── Aggregate Stats ──────────────────────────
   const totals = useMemo(() => {
-    const agg = { sent: 0, delivered: 0, read: 0, replied: 0, blocked: 0, optout: 0, failed: 0 };
+    const agg = {
+      sent: 0,
+      delivered: 0,
+      read: 0,
+      replied: 0,
+      blocked: 0,
+      optout: 0,
+      failed: 0,
+    };
     filtered.forEach((c) => {
       agg.sent += c.total_sent;
       agg.delivered += c.total_delivered;
@@ -180,13 +207,19 @@ export default function ReportsPage() {
   const lineData = useMemo(() => {
     const sorted = [...filtered]
       .filter((c) => c.started_at)
-      .sort((a, b) => new Date(a.started_at!).getTime() - new Date(b.started_at!).getTime());
+      .sort(
+        (a, b) =>
+          new Date(a.started_at!).getTime() - new Date(b.started_at!).getTime(),
+      );
 
     let cumulative = 0;
     return sorted.map((c) => {
       cumulative += c.total_sent;
       return {
-        name: new Date(c.started_at!).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        name: new Date(c.started_at!).toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+        }),
         total: cumulative,
       };
     });
@@ -203,10 +236,26 @@ export default function ReportsPage() {
 
     const data = [
       { name: 'Quente', value: replied, color: ENGAGEMENT_COLORS['Quente'] },
-      { name: 'Morno', value: Math.max(0, readOnly), color: ENGAGEMENT_COLORS['Morno'] },
-      { name: 'Frio', value: Math.max(0, deliveredOnly), color: ENGAGEMENT_COLORS['Frio'] },
-      { name: 'Desconhecido', value: Math.max(0, unknown), color: ENGAGEMENT_COLORS['Desconhecido'] },
-      { name: 'Bloqueado', value: blocked, color: ENGAGEMENT_COLORS['Bloqueado'] },
+      {
+        name: 'Morno',
+        value: Math.max(0, readOnly),
+        color: ENGAGEMENT_COLORS['Morno'],
+      },
+      {
+        name: 'Frio',
+        value: Math.max(0, deliveredOnly),
+        color: ENGAGEMENT_COLORS['Frio'],
+      },
+      {
+        name: 'Desconhecido',
+        value: Math.max(0, unknown),
+        color: ENGAGEMENT_COLORS['Desconhecido'],
+      },
+      {
+        name: 'Bloqueado',
+        value: blocked,
+        color: ENGAGEMENT_COLORS['Bloqueado'],
+      },
     ].filter((d) => d.value > 0);
 
     return data;
@@ -223,9 +272,13 @@ export default function ReportsPage() {
       const aVal = a[sortKey];
       const bVal = b[sortKey];
       if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        return sortDir === 'asc'
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
       }
-      return sortDir === 'asc' ? Number(aVal) - Number(bVal) : Number(bVal) - Number(aVal);
+      return sortDir === 'asc'
+        ? Number(aVal) - Number(bVal)
+        : Number(bVal) - Number(aVal);
     });
   }, [filtered, sortKey, sortDir]);
 
@@ -239,20 +292,53 @@ export default function ReportsPage() {
   }
 
   function SortIcon({ column }: { column: SortKey }) {
-    if (sortKey !== column) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
-    return sortDir === 'asc'
-      ? <ArrowUp className="h-3 w-3 ml-1" />
-      : <ArrowDown className="h-3 w-3 ml-1" />;
+    if (sortKey !== column)
+      return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    return sortDir === 'asc' ? (
+      <ArrowUp className="h-3 w-3 ml-1" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1" />
+    );
   }
 
   // ─── Stat Cards Config ────────────────────────
   const statCards = [
-    { label: 'Total Enviadas', value: totals.sent, icon: Mail, iconColor: 'text-primary' },
-    { label: 'Taxa de Entrega', value: `${pct(totals.delivered, totals.sent)}%`, icon: CheckCircle2, iconColor: 'text-emerald-400' },
-    { label: 'Taxa de Leitura', value: `${pct(totals.read, totals.sent)}%`, icon: Eye, iconColor: 'text-blue-400' },
-    { label: 'Taxa de Resposta', value: `${pct(totals.replied, totals.sent)}%`, icon: MessageSquare, iconColor: 'text-purple-400' },
-    { label: 'Taxa de Bloqueio', value: `${pct(totals.blocked, totals.sent)}%`, icon: ShieldAlert, iconColor: 'text-red-400' },
-    { label: 'Taxa de Opt-out', value: `${pct(totals.optout, totals.sent)}%`, icon: UserX, iconColor: 'text-orange-400' },
+    {
+      label: 'Total Enviadas',
+      value: totals.sent,
+      icon: Mail,
+      iconColor: 'text-primary',
+    },
+    {
+      label: 'Taxa de Entrega',
+      value: `${pct(totals.delivered, totals.sent)}%`,
+      icon: CheckCircle2,
+      iconColor: 'text-emerald-400',
+    },
+    {
+      label: 'Taxa de Leitura',
+      value: `${pct(totals.read, totals.sent)}%`,
+      icon: Eye,
+      iconColor: 'text-blue-400',
+    },
+    {
+      label: 'Taxa de Resposta',
+      value: `${pct(totals.replied, totals.sent)}%`,
+      icon: MessageSquare,
+      iconColor: 'text-purple-400',
+    },
+    {
+      label: 'Taxa de Bloqueio',
+      value: `${pct(totals.blocked, totals.sent)}%`,
+      icon: ShieldAlert,
+      iconColor: 'text-red-400',
+    },
+    {
+      label: 'Taxa de Opt-out',
+      value: `${pct(totals.optout, totals.sent)}%`,
+      icon: UserX,
+      iconColor: 'text-orange-400',
+    },
   ];
 
   return (
@@ -297,11 +383,15 @@ export default function ReportsPage() {
               <Card key={card.label}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm text-text-secondary">{card.label}</span>
+                    <span className="text-sm text-text-secondary">
+                      {card.label}
+                    </span>
                     <Icon className={`h-4 w-4 ${card.iconColor}`} />
                   </div>
                   <p className="text-2xl font-bold text-text-primary">
-                    {typeof card.value === 'number' ? card.value.toLocaleString('pt-BR') : card.value}
+                    {typeof card.value === 'number'
+                      ? card.value.toLocaleString('pt-BR')
+                      : card.value}
                   </p>
                 </CardContent>
               </Card>
@@ -315,29 +405,64 @@ export default function ReportsPage() {
         {/* Bar Chart: Performance per Campaign */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-text-primary text-base">Performance por Campanha</CardTitle>
+            <CardTitle className="text-text-primary text-base">
+              Performance por Campanha
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <Skeleton className="h-[300px] w-full" />
             ) : barData.length === 0 ? (
               <div className="h-[300px] flex items-center justify-center">
-                <p className="text-text-secondary text-sm">Sem dados para exibir</p>
+                <p className="text-text-secondary text-sm">
+                  Sem dados para exibir
+                </p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={barData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.muted} />
-                  <XAxis dataKey="nome" stroke={CHART_COLORS.text} tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
+                <BarChart
+                  data={barData}
+                  margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={CHART_COLORS.muted}
+                  />
+                  <XAxis
+                    dataKey="nome"
+                    stroke={CHART_COLORS.text}
+                    tick={{ fontSize: 11 }}
+                    angle={-20}
+                    textAnchor="end"
+                    height={60}
+                  />
                   <YAxis stroke={CHART_COLORS.text} tick={{ fontSize: 12 }} />
                   <RechartsTooltip content={<ChartTooltip />} />
-                  <Bar dataKey="Enviados" fill={CHART_COLORS.primary} radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="Entregues" fill={CHART_COLORS.secondary} radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="Lidos" fill={CHART_COLORS.warning} radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="Respondidos" fill={CHART_COLORS.purple} radius={[2, 2, 0, 0]} />
+                  <Bar
+                    dataKey="Enviados"
+                    fill={CHART_COLORS.primary}
+                    radius={[2, 2, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="Entregues"
+                    fill={CHART_COLORS.secondary}
+                    radius={[2, 2, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="Lidos"
+                    fill={CHART_COLORS.warning}
+                    radius={[2, 2, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="Respondidos"
+                    fill={CHART_COLORS.purple}
+                    radius={[2, 2, 0, 0]}
+                  />
                   <Legend
                     formatter={(value: string) => (
-                      <span className="text-xs text-text-secondary">{value}</span>
+                      <span className="text-xs text-text-secondary">
+                        {value}
+                      </span>
                     )}
                   />
                 </BarChart>
@@ -349,29 +474,46 @@ export default function ReportsPage() {
         {/* Line Chart: Cumulative Sends */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-text-primary text-base">Envios ao Longo do Tempo</CardTitle>
+            <CardTitle className="text-text-primary text-base">
+              Envios ao Longo do Tempo
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <Skeleton className="h-[300px] w-full" />
             ) : lineData.length === 0 ? (
               <div className="h-[300px] flex items-center justify-center">
-                <p className="text-text-secondary text-sm">Sem dados para exibir</p>
+                <p className="text-text-secondary text-sm">
+                  Sem dados para exibir
+                </p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={lineData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.muted} />
-                  <XAxis dataKey="name" stroke={CHART_COLORS.text} tick={{ fontSize: 12 }} />
+                <LineChart
+                  data={lineData}
+                  margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={CHART_COLORS.muted}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    stroke={CHART_COLORS.text}
+                    tick={{ fontSize: 12 }}
+                  />
                   <YAxis stroke={CHART_COLORS.text} tick={{ fontSize: 12 }} />
                   <RechartsTooltip
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
                       return (
                         <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-lg">
-                          <p className="text-xs text-text-secondary mb-1">{label}</p>
+                          <p className="text-xs text-text-secondary mb-1">
+                            {label}
+                          </p>
                           <p className="text-sm font-medium text-text-primary">
-                            Total: {Number(payload[0].value).toLocaleString('pt-BR')}
+                            Total:{' '}
+                            {Number(payload[0].value).toLocaleString('pt-BR')}
                           </p>
                         </div>
                       );
@@ -396,14 +538,18 @@ export default function ReportsPage() {
       {/* Engagement Pie */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-text-primary text-base">Engajamento dos Contatos</CardTitle>
+          <CardTitle className="text-text-primary text-base">
+            Engajamento dos Contatos
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <Skeleton className="h-[250px] w-full" />
           ) : engagementData.length === 0 ? (
             <div className="h-[250px] flex items-center justify-center">
-              <p className="text-text-secondary text-sm">Sem dados de engajamento</p>
+              <p className="text-text-secondary text-sm">
+                Sem dados de engajamento
+              </p>
             </div>
           ) : (
             <div className="flex flex-col lg:flex-row items-center gap-8">
@@ -420,7 +566,11 @@ export default function ReportsPage() {
                       dataKey="value"
                     >
                       {engagementData.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} stroke="transparent" />
+                        <Cell
+                          key={index}
+                          fill={entry.color}
+                          stroke="transparent"
+                        />
                       ))}
                     </Pie>
                     <RechartsTooltip
@@ -430,7 +580,8 @@ export default function ReportsPage() {
                         return (
                           <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-lg">
                             <p className="text-sm font-medium text-text-primary">
-                              {data.name}: {Number(data.value).toLocaleString('pt-BR')}
+                              {data.name}:{' '}
+                              {Number(data.value).toLocaleString('pt-BR')}
                             </p>
                           </div>
                         );
@@ -438,7 +589,9 @@ export default function ReportsPage() {
                     />
                     <Legend
                       formatter={(value: string) => (
-                        <span className="text-xs text-text-secondary">{value}</span>
+                        <span className="text-xs text-text-secondary">
+                          {value}
+                        </span>
                       )}
                     />
                   </PieChart>
@@ -447,9 +600,16 @@ export default function ReportsPage() {
               <div className="w-full lg:w-1/2 space-y-3">
                 {engagementData.map((entry) => (
                   <div key={entry.name} className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                    <span className="text-sm text-text-secondary flex-1">{entry.name}</span>
-                    <span className="text-sm font-medium text-text-primary">{entry.value.toLocaleString('pt-BR')}</span>
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="text-sm text-text-secondary flex-1">
+                      {entry.name}
+                    </span>
+                    <span className="text-sm font-medium text-text-primary">
+                      {entry.value.toLocaleString('pt-BR')}
+                    </span>
                     <span className="text-xs text-text-secondary w-12 text-right">
                       {pct(entry.value, totals.sent)}%
                     </span>
@@ -464,7 +624,9 @@ export default function ReportsPage() {
       {/* Campaign Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-text-primary text-base">Campanhas</CardTitle>
+          <CardTitle className="text-text-primary text-base">
+            Campanhas
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -497,18 +659,35 @@ export default function ReportsPage() {
                         </span>
                       </th>
                     ))}
-                    <th className="text-left py-3 px-2 text-text-secondary font-medium">Status</th>
+                    <th className="text-left py-3 px-2 text-text-secondary font-medium">
+                      Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {tableData.map((c) => (
-                    <tr key={c.id} className="border-b border-border/50 hover:bg-surface/50 transition-colors">
-                      <td className="py-3 px-2 text-text-primary font-medium max-w-[200px] truncate">{c.nome}</td>
-                      <td className="py-3 px-2 text-text-primary">{c.total_sent.toLocaleString('pt-BR')}</td>
-                      <td className="py-3 px-2 text-text-primary">{c.total_delivered.toLocaleString('pt-BR')}</td>
-                      <td className="py-3 px-2 text-text-primary">{c.total_read.toLocaleString('pt-BR')}</td>
-                      <td className="py-3 px-2 text-text-primary">{c.total_replied.toLocaleString('pt-BR')}</td>
-                      <td className="py-3 px-2 text-text-primary">{c.delivery_rate}%</td>
+                    <tr
+                      key={c.id}
+                      className="border-b border-border/50 hover:bg-surface/50 transition-colors"
+                    >
+                      <td className="py-3 px-2 text-text-primary font-medium max-w-[200px] truncate">
+                        {c.nome}
+                      </td>
+                      <td className="py-3 px-2 text-text-primary">
+                        {c.total_sent.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-2 text-text-primary">
+                        {c.total_delivered.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-2 text-text-primary">
+                        {c.total_read.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-2 text-text-primary">
+                        {c.total_replied.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-2 text-text-primary">
+                        {c.delivery_rate}%
+                      </td>
                       <td className="py-3 px-2">
                         <Badge variant="outline" className="text-xs">
                           {STATUS_LABELS[c.status] ?? c.status}
@@ -518,7 +697,10 @@ export default function ReportsPage() {
                   ))}
                   {tableData.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-text-secondary">
+                      <td
+                        colSpan={7}
+                        className="py-8 text-center text-text-secondary"
+                      >
                         Nenhuma campanha encontrada
                       </td>
                     </tr>

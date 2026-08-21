@@ -88,7 +88,11 @@ export class ContactsController {
     @Req() req: Request & { user: AuthUser },
   ) {
     const data = listContactsBodySchema.parse(body);
-    return this.contactsService.addContactsToList(id, data.contactIds, req.user.tenantId);
+    return this.contactsService.addContactsToList(
+      id,
+      data.contactIds,
+      req.user.tenantId,
+    );
   }
 
   @Delete('lists/:id/contacts')
@@ -98,7 +102,11 @@ export class ContactsController {
     @Req() req: Request & { user: AuthUser },
   ) {
     const data = listContactsBodySchema.parse(body);
-    return this.contactsService.removeContactsFromList(id, data.contactIds, req.user.tenantId);
+    return this.contactsService.removeContactsFromList(
+      id,
+      data.contactIds,
+      req.user.tenantId,
+    );
   }
 
   // ─── Import (before :id) ────────────────────────────

@@ -39,7 +39,8 @@ export class UazApiService {
     const data = (await res.json()) as Record<string, unknown>;
 
     if (!res.ok) {
-      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      const msg =
+        typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
       throw new Error(`UazAPI createInstance failed: ${msg}`);
     }
 
@@ -57,7 +58,7 @@ export class UazApiService {
       tokenType: 'admin',
     });
     const data = await res.json();
-    return Array.isArray(data) ? data as Record<string, unknown>[] : [];
+    return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
   }
 
   /* ------------------------------------------------------------------ */
@@ -77,15 +78,21 @@ export class UazApiService {
 
     return {
       state: this.parseState(instance.status as string),
-      qrcode: typeof instance.qrcode === 'string' && instance.qrcode.length > 10
-        ? instance.qrcode
-        : undefined,
-      profileName: typeof instance.profileName === 'string' ? instance.profileName : undefined,
+      qrcode:
+        typeof instance.qrcode === 'string' && instance.qrcode.length > 10
+          ? instance.qrcode
+          : undefined,
+      profileName:
+        typeof instance.profileName === 'string'
+          ? instance.profileName
+          : undefined,
       owner: typeof instance.owner === 'string' ? instance.owner : undefined,
     };
   }
 
-  async getInstanceStatus(instanceToken: string): Promise<UazApiInstanceStatus> {
+  async getInstanceStatus(
+    instanceToken: string,
+  ): Promise<UazApiInstanceStatus> {
     const res = await this.request('/instance/status', {
       method: 'GET',
       tokenType: 'instance',
@@ -97,11 +104,18 @@ export class UazApiService {
     const status = (data.status as Record<string, unknown>) || {};
 
     return {
-      state: status.connected === true ? 'connected' : this.parseState(instance.status as string),
-      qrcode: typeof instance.qrcode === 'string' && instance.qrcode.length > 10
-        ? instance.qrcode
-        : undefined,
-      profileName: typeof instance.profileName === 'string' ? instance.profileName : undefined,
+      state:
+        status.connected === true
+          ? 'connected'
+          : this.parseState(instance.status as string),
+      qrcode:
+        typeof instance.qrcode === 'string' && instance.qrcode.length > 10
+          ? instance.qrcode
+          : undefined,
+      profileName:
+        typeof instance.profileName === 'string'
+          ? instance.profileName
+          : undefined,
       owner: typeof instance.owner === 'string' ? instance.owner : undefined,
     };
   }
@@ -114,7 +128,9 @@ export class UazApiService {
         token: instanceToken,
       });
     } catch (err) {
-      this.logger.warn(`UazAPI logout failed (ignored): ${(err as Error).message}`);
+      this.logger.warn(
+        `UazAPI logout failed (ignored): ${(err as Error).message}`,
+      );
     }
   }
 
@@ -132,7 +148,8 @@ export class UazApiService {
     const data = (await res.json()) as Record<string, unknown>;
 
     if (!res.ok) {
-      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      const msg =
+        typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
       throw new Error(`UazAPI pairingCode failed: ${msg}`);
     }
 
@@ -224,9 +241,14 @@ export class UazApiService {
         body: { number },
       });
       const data = (await res.json()) as Record<string, unknown>;
-      return { exists: !!data.exists, jid: typeof data.jid === 'string' ? data.jid : undefined };
+      return {
+        exists: !!data.exists,
+        jid: typeof data.jid === 'string' ? data.jid : undefined,
+      };
     } catch (error) {
-      this.logger.error(`checkNumber failed for ${number}: ${(error as Error).message}`);
+      this.logger.error(
+        `checkNumber failed for ${number}: ${(error as Error).message}`,
+      );
       return { exists: false };
     }
   }
@@ -275,17 +297,23 @@ export class UazApiService {
     });
     const data = (await res.json()) as Record<string, unknown>;
     if (!res.ok) {
-      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      const msg =
+        typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
       throw new Error(`UazAPI listGroups failed: ${msg}`);
     }
-    const raw = Array.isArray(data) ? data : Array.isArray(data.groups) ? data.groups : [];
+    const raw = Array.isArray(data)
+      ? data
+      : Array.isArray(data.groups)
+        ? data.groups
+        : [];
     // UazAPI retorna PascalCase: JID, Name, Participants[]. ParticipantCount vem 0
     // (não confiável) → contar pelo array Participants. Mantém fallbacks p/ outras versões.
     return (raw as Record<string, unknown>[]).map((g) => {
       const participants = Array.isArray(g.Participants) ? g.Participants : [];
-      const size = participants.length
-        || (typeof g.ParticipantCount === 'number' ? g.ParticipantCount : 0)
-        || (typeof g.size === 'number' ? g.size : 0);
+      const size =
+        participants.length ||
+        (typeof g.ParticipantCount === 'number' ? g.ParticipantCount : 0) ||
+        (typeof g.size === 'number' ? g.size : 0);
       return {
         id: (g.JID ?? g.id ?? '') as string,
         subject: (g.Name ?? g.subject ?? g.name ?? g.title ?? '') as string,
@@ -307,10 +335,13 @@ export class UazApiService {
     });
     const data = (await res.json()) as Record<string, unknown>;
     if (!res.ok) {
-      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      const msg =
+        typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
       throw new Error(`UazAPI getGroupParticipants failed: ${msg}`);
     }
-    const groups = (Array.isArray(data) ? data : Array.isArray(data.groups) ? data.groups : []) as Record<string, unknown>[];
+    const groups = (
+      Array.isArray(data) ? data : Array.isArray(data.groups) ? data.groups : []
+    ) as Record<string, unknown>[];
     const group = groups.find((g) => (g.JID ?? g.id) === groupJid);
     if (!group) {
       throw new Error(`Grupo ${groupJid} não encontrado na lista da instância`);
@@ -318,7 +349,10 @@ export class UazApiService {
     const raw = Array.isArray(group.Participants) ? group.Participants : [];
     return {
       participants: (raw as Record<string, unknown>[]).map((p) => {
-        const phone = typeof p.PhoneNumber === 'string' ? p.PhoneNumber.replace(/@.*$/, '') : '';
+        const phone =
+          typeof p.PhoneNumber === 'string'
+            ? p.PhoneNumber.replace(/@.*$/, '')
+            : '';
         const id = (phone || p.JID || p.LID || p.id || '') as string;
         const admin = p.IsSuperAdmin
           ? 'superadmin'
@@ -361,8 +395,11 @@ export class UazApiService {
     if (!res.ok) {
       // Corpo cru no erro: o formato exato do payload ainda nao foi validado
       // contra uma adicao real, e a mensagem da API e quem diz o que falta.
-      const msg = typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
-      throw new Error(`UazAPI addGroupParticipants failed: ${msg} — resposta: ${raw.slice(0, 300)}`);
+      const msg =
+        typeof data.message === 'string' ? data.message : `HTTP ${res.status}`;
+      throw new Error(
+        `UazAPI addGroupParticipants failed: ${msg} — resposta: ${raw.slice(0, 300)}`,
+      );
     }
     // A resposta varia por versao: {add,failed}, {added,failed} ou uma lista
     // solta de resultados. Normaliza as tres antes de decidir sucesso.
@@ -384,7 +421,9 @@ export class UazApiService {
     if (added.length === 0 && failed.length === 0 && Array.isArray(data)) {
       const all = (data as Record<string, unknown>[]).map(norm);
       added = all.filter((r) => r.status === '200' || r.status === 'success');
-      failed = all.filter((r) => !(r.status === '200' || r.status === 'success'));
+      failed = all.filter(
+        (r) => !(r.status === '200' || r.status === 'success'),
+      );
     }
 
     if (added.length === 0 && failed.length === 0) {
@@ -426,18 +465,26 @@ export class UazApiService {
       if (!res.ok) {
         return {
           success: false,
-          error: typeof data.message === 'string' ? data.message : `HTTP ${res.status}`,
+          error:
+            typeof data.message === 'string'
+              ? data.message
+              : `HTTP ${res.status}`,
           responseTimeMs,
         };
       }
       return {
         success: true,
-        messageId: typeof data.messageId === 'string' ? data.messageId : undefined,
+        messageId:
+          typeof data.messageId === 'string' ? data.messageId : undefined,
         responseTimeMs,
       };
     } catch (error) {
       const responseTimeMs = Date.now() - start;
-      return { success: false, error: (error as Error).message, responseTimeMs };
+      return {
+        success: false,
+        error: (error as Error).message,
+        responseTimeMs,
+      };
     }
   }
 
@@ -454,7 +501,9 @@ export class UazApiService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
     if (opts.tokenType === 'admin') {
       headers['admintoken'] = this.adminToken;
     } else {

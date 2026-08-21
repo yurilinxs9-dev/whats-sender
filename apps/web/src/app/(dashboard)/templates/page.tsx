@@ -68,12 +68,35 @@ interface TemplatesResponse {
 }
 
 // ─── Type Badge Helpers ─────────────────────────────
-const TYPE_CONFIG: Record<MessageType, { label: string; icon: typeof Type; className: string }> = {
-  TEXT: { label: 'Texto', icon: Type, className: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' },
-  IMAGE: { label: 'Imagem', icon: ImageIcon, className: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-  VIDEO: { label: 'Video', icon: Video, className: 'bg-purple-500/10 text-purple-500 border-purple-500/20' },
-  AUDIO: { label: 'Audio', icon: Headphones, className: 'bg-orange-500/10 text-orange-500 border-orange-500/20' },
-  DOCUMENT: { label: 'Documento', icon: File, className: 'bg-slate-500/10 text-slate-400 border-slate-500/20' },
+const TYPE_CONFIG: Record<
+  MessageType,
+  { label: string; icon: typeof Type; className: string }
+> = {
+  TEXT: {
+    label: 'Texto',
+    icon: Type,
+    className: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
+  },
+  IMAGE: {
+    label: 'Imagem',
+    icon: ImageIcon,
+    className: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  },
+  VIDEO: {
+    label: 'Video',
+    icon: Video,
+    className: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  },
+  AUDIO: {
+    label: 'Audio',
+    icon: Headphones,
+    className: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  },
+  DOCUMENT: {
+    label: 'Documento',
+    icon: File,
+    className: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  },
 };
 
 // ─── Spin Preview ───────────────────────────────────
@@ -104,7 +127,9 @@ export default function TemplatesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
+    null,
+  );
 
   // Form
   const [formNome, setFormNome] = useState('');
@@ -119,11 +144,16 @@ export default function TemplatesPage() {
   const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true);
-      const params: Record<string, string> = { page: String(page), limit: '20' };
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: '20',
+      };
       if (search) params.search = search;
       if (typeFilter !== 'all') params.type = typeFilter;
 
-      const { data } = await api.get<TemplatesResponse>('/templates', { params });
+      const { data } = await api.get<TemplatesResponse>('/templates', {
+        params,
+      });
       setTemplates(data.templates);
       setTotal(data.total);
     } catch {
@@ -205,7 +235,9 @@ export default function TemplatesPage() {
       fetchTemplates();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message ?? 'Erro ao atualizar template');
+      toast.error(
+        error.response?.data?.message ?? 'Erro ao atualizar template',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -254,7 +286,12 @@ export default function TemplatesPage() {
           <FileText className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold text-text-primary">Templates</h1>
         </div>
-        <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+        <Button
+          onClick={() => {
+            resetForm();
+            setCreateOpen(true);
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Novo Template
         </Button>
@@ -269,7 +306,9 @@ export default function TemplatesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Total</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.total}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.total}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -280,7 +319,9 @@ export default function TemplatesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Com Spin</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.withSpin}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.withSpin}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -291,7 +332,9 @@ export default function TemplatesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Com Opt-out</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.withOptout}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.withOptout}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -305,10 +348,19 @@ export default function TemplatesPage() {
             placeholder="Buscar por nome..."
             className="pl-9"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
-        <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => {
+            setTypeFilter(v);
+            setPage(1);
+          }}
+        >
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filtrar tipo" />
           </SelectTrigger>
@@ -334,11 +386,18 @@ export default function TemplatesPage() {
         <Card>
           <CardContent className="p-12 flex flex-col items-center justify-center text-center">
             <FileText className="h-12 w-12 text-text-secondary mb-4" />
-            <h3 className="text-lg font-semibold text-text-primary mb-1">Nenhum template</h3>
+            <h3 className="text-lg font-semibold text-text-primary mb-1">
+              Nenhum template
+            </h3>
             <p className="text-text-secondary mb-4">
               Crie seu primeiro template para usar nos disparos de mensagens.
             </p>
-            <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+            <Button
+              onClick={() => {
+                resetForm();
+                setCreateOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Novo Template
             </Button>
@@ -350,7 +409,10 @@ export default function TemplatesPage() {
             const typeCfg = TYPE_CONFIG[template.type];
             const TypeIcon = typeCfg.icon;
             return (
-              <Card key={template.id} className="hover:border-border/80 transition-colors">
+              <Card
+                key={template.id}
+                className="hover:border-border/80 transition-colors"
+              >
                 <CardContent className="p-4">
                   <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                     {/* Name & Type */}
@@ -370,7 +432,10 @@ export default function TemplatesPage() {
                           </Badge>
                         )}
                         {template.has_optout && (
-                          <Badge variant="outline" className="text-xs border-danger/30 text-danger">
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-danger/30 text-danger"
+                          >
                             <ShieldOff className="mr-1 h-3 w-3" />
                             Opt-out
                           </Badge>
@@ -385,9 +450,13 @@ export default function TemplatesPage() {
 
                     {/* Created */}
                     <div className="text-center shrink-0">
-                      <span className="text-xs text-text-secondary block mb-1">Criado em</span>
+                      <span className="text-xs text-text-secondary block mb-1">
+                        Criado em
+                      </span>
                       <span className="text-sm text-text-primary">
-                        {new Date(template.created_at).toLocaleDateString('pt-BR')}
+                        {new Date(template.created_at).toLocaleDateString(
+                          'pt-BR',
+                        )}
                       </span>
                     </div>
 
@@ -422,7 +491,8 @@ export default function TemplatesPage() {
       {!loading && templates.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-text-secondary">
-            {total} template{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
+            {total} template{total !== 1 ? 's' : ''} encontrado
+            {total !== 1 ? 's' : ''}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -467,7 +537,10 @@ export default function TemplatesPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-type">Tipo</Label>
-              <Select value={formType} onValueChange={(v) => setFormType(v as MessageType)}>
+              <Select
+                value={formType}
+                onValueChange={(v) => setFormType(v as MessageType)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -490,7 +563,8 @@ export default function TemplatesPage() {
                 onChange={(e) => setFormContent(e.target.value)}
               />
               <p className="text-xs text-text-secondary">
-                Use {'{opcao1|opcao2|opcao3}'} para variacoes e {'{{nome}}'} para variaveis
+                Use {'{opcao1|opcao2|opcao3}'} para variacoes e {'{{nome}}'}{' '}
+                para variaveis
               </p>
             </div>
             {showMediaField && (
@@ -515,12 +589,25 @@ export default function TemplatesPage() {
                 }`}
               >
                 {formHasOptout && (
-                  <svg className="h-4 w-4 text-zinc-950" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 8l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    className="h-4 w-4 text-zinc-950"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M4 8l3 3 5-5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 )}
               </button>
-              <Label className="cursor-pointer" onClick={() => setFormHasOptout(!formHasOptout)}>
+              <Label
+                className="cursor-pointer"
+                onClick={() => setFormHasOptout(!formHasOptout)}
+              >
                 Incluir opt-out (descadastramento)
               </Label>
             </div>
@@ -539,7 +626,9 @@ export default function TemplatesPage() {
                   </Button>
                 </div>
                 {detectSpin(formContent) && (
-                  <p className="text-xs text-warning">Spin detectado - cada preview gera uma variacao</p>
+                  <p className="text-xs text-warning">
+                    Spin detectado - cada preview gera uma variacao
+                  </p>
                 )}
                 <div className="rounded-lg border border-border bg-surface/50 p-3">
                   <p className="text-sm text-text-primary whitespace-pre-wrap">
@@ -550,10 +639,17 @@ export default function TemplatesPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleCreate} disabled={submitting || !formNome.trim() || !formContent.trim()}>
+            <Button
+              onClick={handleCreate}
+              disabled={submitting || !formNome.trim() || !formContent.trim()}
+            >
               {submitting ? 'Criando...' : 'Criar Template'}
             </Button>
           </DialogFooter>
@@ -580,7 +676,10 @@ export default function TemplatesPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-type">Tipo</Label>
-              <Select value={formType} onValueChange={(v) => setFormType(v as MessageType)}>
+              <Select
+                value={formType}
+                onValueChange={(v) => setFormType(v as MessageType)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -602,7 +701,8 @@ export default function TemplatesPage() {
                 onChange={(e) => setFormContent(e.target.value)}
               />
               <p className="text-xs text-text-secondary">
-                Use {'{opcao1|opcao2|opcao3}'} para variacoes e {'{{nome}}'} para variaveis
+                Use {'{opcao1|opcao2|opcao3}'} para variacoes e {'{{nome}}'}{' '}
+                para variaveis
               </p>
             </div>
             {showMediaField && (
@@ -627,12 +727,25 @@ export default function TemplatesPage() {
                 }`}
               >
                 {formHasOptout && (
-                  <svg className="h-4 w-4 text-zinc-950" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 8l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    className="h-4 w-4 text-zinc-950"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M4 8l3 3 5-5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 )}
               </button>
-              <Label className="cursor-pointer" onClick={() => setFormHasOptout(!formHasOptout)}>
+              <Label
+                className="cursor-pointer"
+                onClick={() => setFormHasOptout(!formHasOptout)}
+              >
                 Incluir opt-out (descadastramento)
               </Label>
             </div>
@@ -651,7 +764,9 @@ export default function TemplatesPage() {
                   </Button>
                 </div>
                 {detectSpin(formContent) && (
-                  <p className="text-xs text-warning">Spin detectado - cada preview gera uma variacao</p>
+                  <p className="text-xs text-warning">
+                    Spin detectado - cada preview gera uma variacao
+                  </p>
                 )}
                 <div className="rounded-lg border border-border bg-surface/50 p-3">
                   <p className="text-sm text-text-primary whitespace-pre-wrap">
@@ -662,10 +777,17 @@ export default function TemplatesPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleEdit} disabled={submitting || !formNome.trim() || !formContent.trim()}>
+            <Button
+              onClick={handleEdit}
+              disabled={submitting || !formNome.trim() || !formContent.trim()}
+            >
               {submitting ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
@@ -679,14 +801,23 @@ export default function TemplatesPage() {
             <DialogTitle>Excluir Template</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir o template{' '}
-              <strong>{selectedTemplate?.nome}</strong>? Esta acao nao pode ser desfeita.
+              <strong>{selectedTemplate?.nome}</strong>? Esta acao nao pode ser
+              desfeita.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={submitting}
+            >
               {submitting ? 'Excluindo...' : 'Excluir'}
             </Button>
           </DialogFooter>

@@ -54,7 +54,13 @@ export class InstancesService {
       this.prisma.instance.count({ where }),
     ]);
 
-    return { instances, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      instances,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: string, tenantId: string) {
@@ -76,11 +82,14 @@ export class InstancesService {
     const existing = await this.prisma.instance.findUnique({
       where: { nome: data.nome },
     });
-    if (existing) throw new ConflictException('Ja existe uma instancia com este nome');
+    if (existing)
+      throw new ConflictException('Ja existe uma instancia com este nome');
 
     // Create instance on UazAPI
     const uazResult = await this.uazApi.createInstance(data.nome);
-    this.logger.log(`UazAPI instance created: ${uazResult.name} token=${uazResult.token.slice(0, 8)}...`);
+    this.logger.log(
+      `UazAPI instance created: ${uazResult.name} token=${uazResult.token.slice(0, 8)}...`,
+    );
 
     const instance = await this.prisma.instance.create({
       data: {
@@ -94,7 +103,11 @@ export class InstancesService {
       },
     });
 
-    this.gateway.emitInstanceStatusChanged(instance.nome, instance.status, tenantId);
+    this.gateway.emitInstanceStatusChanged(
+      instance.nome,
+      instance.status,
+      tenantId,
+    );
     return instance;
   }
 
@@ -108,7 +121,8 @@ export class InstancesService {
       const existing = await this.prisma.instance.findUnique({
         where: { nome: data.nome },
       });
-      if (existing) throw new ConflictException('Ja existe uma instancia com este nome');
+      if (existing)
+        throw new ConflictException('Ja existe uma instancia com este nome');
     }
 
     const updated = await this.prisma.instance.update({
@@ -116,12 +130,18 @@ export class InstancesService {
       data: {
         ...(data.nome !== undefined && { nome: data.nome }),
         ...(data.telefone !== undefined && { telefone: data.telefone }),
-        ...(data.daily_limit !== undefined && { daily_limit: data.daily_limit }),
+        ...(data.daily_limit !== undefined && {
+          daily_limit: data.daily_limit,
+        }),
         ...(data.config !== undefined && { config: data.config }),
       },
     });
 
-    this.gateway.emitInstanceStatusChanged(updated.nome, updated.status, tenantId);
+    this.gateway.emitInstanceStatusChanged(
+      updated.nome,
+      updated.status,
+      tenantId,
+    );
     return updated;
   }
 
@@ -137,7 +157,9 @@ export class InstancesService {
       try {
         await this.uazApi.deleteInstance(config.uazapi_token);
       } catch (err) {
-        this.logger.warn(`Failed to delete UazAPI instance: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to delete UazAPI instance: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -168,7 +190,9 @@ export class InstancesService {
 
     const config = (instance.config as InstanceConfig) || {};
     if (!config.uazapi_token) {
-      throw new NotFoundException('Instancia sem token UazAPI. Recrie a instancia.');
+      throw new NotFoundException(
+        'Instancia sem token UazAPI. Recrie a instancia.',
+      );
     }
 
     // Call UazAPI connect to get QR code
@@ -179,7 +203,11 @@ export class InstancesService {
       data: { status: result.state },
     });
 
-    this.gateway.emitInstanceStatusChanged(instance.nome, result.state, tenantId);
+    this.gateway.emitInstanceStatusChanged(
+      instance.nome,
+      result.state,
+      tenantId,
+    );
 
     return {
       id: instance.id,
@@ -199,17 +227,26 @@ export class InstancesService {
 
     const config = (instance.config as InstanceConfig) || {};
     if (!config.uazapi_token) {
-      throw new NotFoundException('Instancia sem token UazAPI. Recrie a instancia.');
+      throw new NotFoundException(
+        'Instancia sem token UazAPI. Recrie a instancia.',
+      );
     }
 
-    const result = await this.uazApi.connectWithPairingCode(config.uazapi_token, phoneNumber);
+    const result = await this.uazApi.connectWithPairingCode(
+      config.uazapi_token,
+      phoneNumber,
+    );
 
     await this.prisma.instance.update({
       where: { id },
       data: { status: 'connecting' },
     });
 
-    this.gateway.emitInstanceStatusChanged(instance.nome, 'connecting', tenantId);
+    this.gateway.emitInstanceStatusChanged(
+      instance.nome,
+      'connecting',
+      tenantId,
+    );
 
     return {
       id: instance.id,
@@ -241,7 +278,11 @@ export class InstancesService {
           ...(result.owner && { telefone: result.owner }),
         },
       });
-      this.gateway.emitInstanceStatusChanged(instance.nome, result.state, tenantId);
+      this.gateway.emitInstanceStatusChanged(
+        instance.nome,
+        result.state,
+        tenantId,
+      );
     }
 
     return {
@@ -270,7 +311,11 @@ export class InstancesService {
       data: { status: 'disconnected' },
     });
 
-    this.gateway.emitInstanceStatusChanged(updated.nome, 'disconnected', tenantId);
+    this.gateway.emitInstanceStatusChanged(
+      updated.nome,
+      'disconnected',
+      tenantId,
+    );
     return updated;
   }
 
@@ -281,7 +326,8 @@ export class InstancesService {
     const existing = await this.prisma.instance.findUnique({
       where: { nome: data.nome },
     });
-    if (existing) throw new ConflictException('Ja existe uma instancia com este nome');
+    if (existing)
+      throw new ConflictException('Ja existe uma instancia com este nome');
 
     // Validate token by checking status on UazAPI
     const status = await this.uazApi.getInstanceStatus(data.uazapi_token);
@@ -299,7 +345,11 @@ export class InstancesService {
       },
     });
 
-    this.gateway.emitInstanceStatusChanged(instance.nome, instance.status, tenantId);
+    this.gateway.emitInstanceStatusChanged(
+      instance.nome,
+      instance.status,
+      tenantId,
+    );
     return instance;
   }
 

@@ -8,7 +8,12 @@ export function getSocket(token: string): Socket {
   if (socket?.connected) return socket;
 
   // Skip WebSocket in production when no WSS is available
-  if (!WS_URL || (typeof window !== 'undefined' && window.location.protocol === 'https:' && WS_URL.startsWith('http:'))) {
+  if (
+    !WS_URL ||
+    (typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      WS_URL.startsWith('http:'))
+  ) {
     // Return a noop socket-like object to avoid errors
     const noop = io('http://localhost:0', { autoConnect: false }) as Socket;
     return noop;

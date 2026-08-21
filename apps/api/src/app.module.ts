@@ -34,7 +34,10 @@ import { GroupsModule } from './modules/groups/groups.module';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const redisUrl = config.get<string>('REDIS_URL', 'redis://localhost:6379');
+        const redisUrl = config.get<string>(
+          'REDIS_URL',
+          'redis://localhost:6379',
+        );
         const url = new URL(redisUrl);
         return {
           connection: {

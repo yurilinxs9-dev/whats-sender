@@ -38,7 +38,8 @@ export class GroupsService {
       where: { id: dto.instance_id, tenant_id: tenantId },
     });
     if (!instance) throw new NotFoundException('Instância não encontrada');
-    if (instance.status !== 'connected') throw new BadRequestException('Instância precisa estar conectada');
+    if (instance.status !== 'connected')
+      throw new BadRequestException('Instância precisa estar conectada');
 
     const extraction = await this.prisma.groupExtraction.create({
       data: {
@@ -68,7 +69,10 @@ export class GroupsService {
     void this.runExtraction(tenantId, id).catch(async (error) => {
       this.logger.error(`Extração ${id} falhou: ${(error as Error).message}`);
       await this.prisma.groupExtraction
-        .update({ where: { id }, data: { status: 'FAILED', error: (error as Error).message } })
+        .update({
+          where: { id },
+          data: { status: 'FAILED', error: (error as Error).message },
+        })
         .catch(() => undefined);
       this.gateway.emitExtractionProgress(id, { status: 'FAILED' }, tenantId);
     });
@@ -76,17 +80,26 @@ export class GroupsService {
   }
 
   private async runExtraction(tenantId: string, id: string) {
-    const extraction = await this.prisma.groupExtraction.findUnique({ where: { id } });
+    const extraction = await this.prisma.groupExtraction.findUnique({
+      where: { id },
+    });
     if (!extraction) return;
 
-    const instance = await this.prisma.instance.findUnique({ where: { id: extraction.instance_id } });
+    const instance = await this.prisma.instance.findUnique({
+      where: { id: extraction.instance_id },
+    });
     const token = this.extractToken(instance?.config);
     if (!token) throw new Error('Instância sem token UazAPI. Reconecte.');
 
-    const result = await this.uazapi.getGroupParticipants(token, extraction.source_group_jid);
+    const result = await this.uazapi.getGroupParticipants(
+      token,
+      extraction.source_group_jid,
+    );
 
     // Refresh total: limpa e recria (1 query, sem estourar pool com 1000+ upserts)
-    await this.prisma.extractedMember.deleteMany({ where: { extraction_id: id } });
+    await this.prisma.extractedMember.deleteMany({
+      where: { extraction_id: id },
+    });
     await this.prisma.extractedMember.createMany({
       data: result.participants
         .filter((p) => p.id)
@@ -99,12 +112,18 @@ export class GroupsService {
       skipDuplicates: true,
     });
 
-    const total = await this.prisma.extractedMember.count({ where: { extraction_id: id } });
+    const total = await this.prisma.extractedMember.count({
+      where: { extraction_id: id },
+    });
     await this.prisma.groupExtraction.update({
       where: { id },
       data: { status: 'DONE', total_members: total, extracted_at: new Date() },
     });
-    this.gateway.emitExtractionProgress(id, { status: 'DONE', total }, tenantId);
+    this.gateway.emitExtractionProgress(
+      id,
+      { status: 'DONE', total },
+      tenantId,
+    );
     this.logger.log(`Extração ${id}: ${total} membros`);
   }
 
@@ -147,14 +166,20 @@ export class GroupsService {
     });
     if (!extraction) throw new NotFoundException('Extração não encontrada');
     if (extraction.status !== 'DONE' || extraction.members.length === 0) {
-      throw new BadRequestException('Extração ainda não tem membros. Extraia primeiro.');
+      throw new BadRequestException(
+        'Extração ainda não tem membros. Extraia primeiro.',
+      );
     }
 
     const destInstance = await this.prisma.instance.findFirst({
       where: { id: dto.dest_instance_id, tenant_id: tenantId },
     });
-    if (!destInstance) throw new NotFoundException('Instância destino não encontrada');
-    if (destInstance.status !== 'connected') throw new BadRequestException('Instância destino precisa estar conectada');
+    if (!destInstance)
+      throw new NotFoundException('Instância destino não encontrada');
+    if (destInstance.status !== 'connected')
+      throw new BadRequestException(
+        'Instância destino precisa estar conectada',
+      );
 
     const job = await this.prisma.groupAddJob.create({
       data: {
@@ -215,27 +240,41 @@ export class GroupsService {
 
   async runAddJob(tenantId: string, id: string, limitOverride?: number) {
     const job = await this.assertAddJob(tenantId, id);
-    if (job.status === 'RUNNING') throw new BadRequestException('Job já está rodando');
+    if (job.status === 'RUNNING')
+      throw new BadRequestException('Job já está rodando');
 
-    const destInstance = await this.prisma.instance.findUnique({ where: { id: job.dest_instance_id } });
+    const destInstance = await this.prisma.instance.findUnique({
+      where: { id: job.dest_instance_id },
+    });
     if (!this.extractToken(destInstance?.config)) {
-      throw new BadRequestException('Instância destino sem token UazAPI. Reconecte.');
+      throw new BadRequestException(
+        'Instância destino sem token UazAPI. Reconecte.',
+      );
     }
 
-    const limit = Math.max(1, Math.min(limitOverride ?? job.per_run_limit, 500));
+    const limit = Math.max(
+      1,
+      Math.min(limitOverride ?? job.per_run_limit, 500),
+    );
     const pending = await this.prisma.addTarget.findMany({
       where: { job_id: id, status: 'PENDING' },
       select: { id: true },
       take: limit,
     });
-    if (pending.length === 0) throw new BadRequestException('Nenhum alvo pendente para adicionar');
+    if (pending.length === 0)
+      throw new BadRequestException('Nenhum alvo pendente para adicionar');
 
-    await this.prisma.groupAddJob.update({ where: { id }, data: { status: 'RUNNING' } });
+    await this.prisma.groupAddJob.update({
+      where: { id },
+      data: { status: 'RUNNING' },
+    });
 
     // Espaça as adições: delay cumulativo com jitter entre delay_min_s e delay_max_s
     let cumMs = 0;
     for (const target of pending) {
-      const gapS = job.delay_min_s + Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
+      const gapS =
+        job.delay_min_s +
+        Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
       cumMs += Math.round(gapS * 1000);
       await this.groupAddQueue.add(
         'add-target',
@@ -250,8 +289,14 @@ export class GroupsService {
       );
     }
 
-    this.gateway.emitAddJobProgress(id, { status: 'RUNNING', queued: pending.length }, tenantId);
-    this.logger.log(`AddJob ${id}: ${pending.length} alvos enfileirados (limite ${limit})`);
+    this.gateway.emitAddJobProgress(
+      id,
+      { status: 'RUNNING', queued: pending.length },
+      tenantId,
+    );
+    this.logger.log(
+      `AddJob ${id}: ${pending.length} alvos enfileirados (limite ${limit})`,
+    );
     return { queued: pending.length };
   }
 
@@ -261,13 +306,21 @@ export class GroupsService {
       where: { id },
       data: {
         ...(dto.nome !== undefined && { nome: dto.nome }),
-        ...(dto.per_run_limit !== undefined && { per_run_limit: dto.per_run_limit }),
-        ...(dto.daily_add_cap !== undefined && { daily_add_cap: dto.daily_add_cap }),
+        ...(dto.per_run_limit !== undefined && {
+          per_run_limit: dto.per_run_limit,
+        }),
+        ...(dto.daily_add_cap !== undefined && {
+          daily_add_cap: dto.daily_add_cap,
+        }),
         ...(dto.delay_min_s !== undefined && { delay_min_s: dto.delay_min_s }),
         ...(dto.delay_max_s !== undefined && { delay_max_s: dto.delay_max_s }),
-        ...(dto.send_invite_on_fail !== undefined && { send_invite_on_fail: dto.send_invite_on_fail }),
+        ...(dto.send_invite_on_fail !== undefined && {
+          send_invite_on_fail: dto.send_invite_on_fail,
+        }),
         ...(dto.invite_link !== undefined && { invite_link: dto.invite_link }),
-        ...(dto.invite_message !== undefined && { invite_message: dto.invite_message }),
+        ...(dto.invite_message !== undefined && {
+          invite_message: dto.invite_message,
+        }),
       },
     });
     return this.getAddJob(tenantId, id);
@@ -281,21 +334,28 @@ export class GroupsService {
   async sendInvites(tenantId: string, id: string, dto: SendInviteDto) {
     const job = await this.assertAddJob(tenantId, id);
     if (!job.invite_link) {
-      throw new BadRequestException('Job sem link de convite. Cole o link do grupo nas configuracoes.');
+      throw new BadRequestException(
+        'Job sem link de convite. Cole o link do grupo nas configuracoes.',
+      );
     }
 
     const targets = await this.prisma.addTarget.findMany({
       where: {
         job_id: id,
-        ...(dto.target_ids ? { id: { in: dto.target_ids } } : { status: 'FAILED' }),
+        ...(dto.target_ids
+          ? { id: { in: dto.target_ids } }
+          : { status: 'FAILED' }),
       },
       select: { id: true },
     });
-    if (targets.length === 0) throw new BadRequestException('Nenhum alvo para convidar');
+    if (targets.length === 0)
+      throw new BadRequestException('Nenhum alvo para convidar');
 
     let cumMs = 0;
     for (const target of targets) {
-      const gapS = job.delay_min_s + Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
+      const gapS =
+        job.delay_min_s +
+        Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
       cumMs += Math.round(gapS * 1000);
       await this.groupAddQueue.add(
         'invite-target',
@@ -310,7 +370,11 @@ export class GroupsService {
       );
     }
 
-    this.gateway.emitAddJobProgress(id, { invites_queued: targets.length }, tenantId);
+    this.gateway.emitAddJobProgress(
+      id,
+      { invites_queued: targets.length },
+      tenantId,
+    );
     this.logger.log(`AddJob ${id}: ${targets.length} convites enfileirados`);
     return { queued: targets.length };
   }
@@ -318,25 +382,37 @@ export class GroupsService {
   // Devolve alvos FAILED para PENDING (ex.: falha por bug de integracao, nao por bloqueio).
   async retryFailedTargets(tenantId: string, id: string) {
     const job = await this.assertAddJob(tenantId, id);
-    if (job.status === 'RUNNING') throw new BadRequestException('Pause o job antes de re-tentar');
+    if (job.status === 'RUNNING')
+      throw new BadRequestException('Pause o job antes de re-tentar');
 
     const { count } = await this.prisma.addTarget.updateMany({
       where: { job_id: id, status: 'FAILED' },
       data: { status: 'PENDING', attempts: 0, error: null },
     });
-    if (count === 0) throw new BadRequestException('Nenhum alvo falhado para re-tentar');
+    if (count === 0)
+      throw new BadRequestException('Nenhum alvo falhado para re-tentar');
 
     await this.prisma.groupAddJob.update({
       where: { id },
-      data: { failed_count: Math.max(0, job.failed_count - count), status: 'IDLE' },
+      data: {
+        failed_count: Math.max(0, job.failed_count - count),
+        status: 'IDLE',
+      },
     });
-    this.gateway.emitAddJobProgress(id, { status: 'IDLE', retried: count }, tenantId);
+    this.gateway.emitAddJobProgress(
+      id,
+      { status: 'IDLE', retried: count },
+      tenantId,
+    );
     return { retried: count };
   }
 
   async pauseAddJob(tenantId: string, id: string) {
     await this.assertAddJob(tenantId, id);
-    const updated = await this.prisma.groupAddJob.update({ where: { id }, data: { status: 'PAUSED' } });
+    const updated = await this.prisma.groupAddJob.update({
+      where: { id },
+      data: { status: 'PAUSED' },
+    });
     this.gateway.emitAddJobProgress(id, { status: 'PAUSED' }, tenantId);
     return updated;
   }
@@ -356,18 +432,23 @@ export class GroupsService {
     });
     if (!instance) throw new NotFoundException('Instância não encontrada');
     const token = this.extractToken(instance.config);
-    if (!token) throw new BadRequestException('Instância sem token UazAPI. Reconecte.');
+    if (!token)
+      throw new BadRequestException('Instância sem token UazAPI. Reconecte.');
     return this.uazapi.listGroups(token);
   }
 
   private async assertExtraction(tenantId: string, id: string) {
-    const e = await this.prisma.groupExtraction.findFirst({ where: { id, tenant_id: tenantId } });
+    const e = await this.prisma.groupExtraction.findFirst({
+      where: { id, tenant_id: tenantId },
+    });
     if (!e) throw new NotFoundException('Extração não encontrada');
     return e;
   }
 
   private async assertAddJob(tenantId: string, id: string) {
-    const j = await this.prisma.groupAddJob.findFirst({ where: { id, tenant_id: tenantId } });
+    const j = await this.prisma.groupAddJob.findFirst({
+      where: { id, tenant_id: tenantId },
+    });
     if (!j) throw new NotFoundException('Job de adição não encontrado');
     return j;
   }

@@ -57,7 +57,12 @@ export class WarmupService {
       where: { id: instanceId },
     });
 
-    if (!instance || instance.warmup_completed || instance.status !== 'connected') return;
+    if (
+      !instance ||
+      instance.warmup_completed ||
+      instance.status !== 'connected'
+    )
+      return;
     if (instance.cooldown_until && instance.cooldown_until > new Date()) return;
 
     const config = this.PHASE_CONFIG[instance.warmup_phase];
@@ -70,7 +75,8 @@ export class WarmupService {
     }
 
     // Calculate how many msgs to send this cycle
-    const remaining = config.maxMsgsPerDay - instance.daily_sent - instance.buddy_sent_today;
+    const remaining =
+      config.maxMsgsPerDay - instance.daily_sent - instance.buddy_sent_today;
     if (remaining <= 0) return; // daily limit reached
 
     // Send buddy messages (organic activity)
@@ -125,7 +131,8 @@ export class WarmupService {
       });
     }
 
-    const token = (instance.config as Record<string, string> | null)?.uazapi_token ?? '';
+    const token =
+      (instance.config as Record<string, string> | null)?.uazapi_token ?? '';
     let sent = 0;
 
     // If no buddies (single instance), send self-warmup messages to own number
@@ -136,7 +143,9 @@ export class WarmupService {
       });
 
       if (!selfPhone?.telefone) {
-        this.logger.warn(`No buddies and no phone for ${instance.nome} — skipping warmup msgs`);
+        this.logger.warn(
+          `No buddies and no phone for ${instance.nome} — skipping warmup msgs`,
+        );
         return;
       }
 
@@ -147,14 +156,16 @@ export class WarmupService {
         select: { telefone: true },
       });
 
-      const targets = contacts.length > 0
-        ? contacts.map((c) => c.telefone)
-        : [selfPhone.telefone]; // fallback: msg to self
+      const targets =
+        contacts.length > 0
+          ? contacts.map((c) => c.telefone)
+          : [selfPhone.telefone]; // fallback: msg to self
 
       for (const phone of targets) {
         if (sent >= count) break;
 
-        const template = this.GREETINGS[Math.floor(Math.random() * this.GREETINGS.length)];
+        const template =
+          this.GREETINGS[Math.floor(Math.random() * this.GREETINGS.length)];
         const message = this.spin.processMessage(template, {});
 
         try {
@@ -190,12 +201,17 @@ export class WarmupService {
       if (!buddyInstance?.telefone) continue;
 
       // Generate organic message via spin engine
-      const template = this.GREETINGS[Math.floor(Math.random() * this.GREETINGS.length)];
+      const template =
+        this.GREETINGS[Math.floor(Math.random() * this.GREETINGS.length)];
       const message = this.spin.processMessage(template, {});
 
       try {
         // Simulate composing
-        await this.uazApi.setPresence(token, buddyInstance.telefone, 'composing');
+        await this.uazApi.setPresence(
+          token,
+          buddyInstance.telefone,
+          'composing',
+        );
         // Wait typing time (1-3s)
         await this.delay(1000 + Math.random() * 2000);
         // Send
@@ -259,7 +275,9 @@ export class WarmupService {
     nome: string;
     tenant_id: string;
   }): Promise<void> {
-    const currentIndex = this.PHASES.indexOf(instance.warmup_phase as WarmupPhase);
+    const currentIndex = this.PHASES.indexOf(
+      instance.warmup_phase as WarmupPhase,
+    );
     if (currentIndex === -1 || currentIndex >= this.PHASES.length - 1) {
       // Already at FULL_CAPACITY -- mark completed
       await this.prisma.instance.update({

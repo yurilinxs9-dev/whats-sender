@@ -104,11 +104,18 @@ export class InstancesController {
     @Body() body: { phoneNumber: string },
     @Req() req: Request & { user: AuthUser },
   ) {
-    const phoneNumber = typeof body.phoneNumber === 'string' ? body.phoneNumber.replace(/\D/g, '') : '';
+    const phoneNumber =
+      typeof body.phoneNumber === 'string'
+        ? body.phoneNumber.replace(/\D/g, '')
+        : '';
     if (!phoneNumber || phoneNumber.length < 10) {
       throw new Error('Numero de telefone invalido');
     }
-    return this.instancesService.connectByPhone(id, phoneNumber, req.user.tenantId);
+    return this.instancesService.connectByPhone(
+      id,
+      phoneNumber,
+      req.user.tenantId,
+    );
   }
 
   @Get(':id/qrcode')

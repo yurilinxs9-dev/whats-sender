@@ -76,11 +76,15 @@ app.post('/webhook/:secret', (req, res) => {
 
   const targets = ROUTES[instance];
   if (!targets || targets.length === 0) {
-    log(`ignorado: instance="${instance}" event=${event} (nao mapeado em ROUTES)`);
+    log(
+      `ignorado: instance="${instance}" event=${event} (nao mapeado em ROUTES)`,
+    );
     return;
   }
 
-  log(`recebido: event=${event} instance="${instance}" → ${targets.length} destinos`);
+  log(
+    `recebido: event=${event} instance="${instance}" → ${targets.length} destinos`,
+  );
   targets.forEach((url, i) => deliver(`${instance}#${i}`, url, body, 1));
 });
 
@@ -110,6 +114,10 @@ async function deliver(label, url, body, attempt) {
 
 app.listen(PORT, () => {
   log(`UazAPI Aggregator rodando na porta ${PORT}`);
-  log(`Endpoint p/ UazAPI: http://<IP-DA-VPS>:${PORT}/webhook/${WEBHOOK_SECRET}`);
-  log(`Numeros mapeados: ${Object.keys(ROUTES).join(', ') || '(nenhum ainda)'}`);
+  log(
+    `Endpoint p/ UazAPI: http://<IP-DA-VPS>:${PORT}/webhook/${WEBHOOK_SECRET}`,
+  );
+  log(
+    `Numeros mapeados: ${Object.keys(ROUTES).join(', ') || '(nenhum ainda)'}`,
+  );
 });

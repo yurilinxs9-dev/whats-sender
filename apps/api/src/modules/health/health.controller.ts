@@ -16,7 +16,10 @@ export class HealthController {
   @Public()
   @Get('redis')
   async checkRedis() {
-    const redisUrl = this.config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    const redisUrl = this.config.get<string>(
+      'REDIS_URL',
+      'redis://localhost:6379',
+    );
     const url = new URL(redisUrl);
 
     const redis = new Redis({
@@ -32,9 +35,12 @@ export class HealthController {
       const pong = await redis.ping();
       return { status: 'ok', ping: pong, timestamp: new Date().toISOString() };
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
-      return { status: 'error', error: message, timestamp: new Date().toISOString() };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        status: 'error',
+        error: message,
+        timestamp: new Date().toISOString(),
+      };
     } finally {
       redis.disconnect();
     }

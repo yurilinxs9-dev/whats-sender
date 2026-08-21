@@ -31,7 +31,8 @@ export class WarmupController {
     });
 
     if (!instance) throw new NotFoundException('Instancia nao encontrada');
-    if (instance.tenant_id !== tenantId) throw new ForbiddenException('Acesso negado');
+    if (instance.tenant_id !== tenantId)
+      throw new ForbiddenException('Acesso negado');
 
     return instance;
   }

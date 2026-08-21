@@ -6,11 +6,7 @@ export const updateCampaignSchema = z.object({
     .min(2, 'Nome deve ter pelo menos 2 caracteres')
     .max(200, 'Nome deve ter no maximo 200 caracteres')
     .optional(),
-  delay_min: z
-    .number()
-    .int()
-    .min(5, 'Delay minimo e 5 segundos')
-    .optional(),
+  delay_min: z.number().int().min(5, 'Delay minimo e 5 segundos').optional(),
   delay_max: z
     .number()
     .int()

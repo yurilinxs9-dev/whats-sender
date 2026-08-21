@@ -39,7 +39,9 @@ export class HealthMonitorService {
       where: { id: instanceId },
     });
     if (!instance) {
-      this.logger.warn(`Instance ${instanceId} not found, skipping health check`);
+      this.logger.warn(
+        `Instance ${instanceId} not found, skipping health check`,
+      );
       return;
     }
 
@@ -88,7 +90,10 @@ export class HealthMonitorService {
       }
 
       const newScore = this.clampScore(instance.health_score + scoreChange);
-      const circuitAction = this.getCircuitAction(newScore, instance.health_score);
+      const circuitAction = this.getCircuitAction(
+        newScore,
+        instance.health_score,
+      );
 
       this.logger.debug(
         `Instance ${instance.nome}: state=${status.state} mapped=${mappedStatus} score=${instance.health_score}->${newScore} circuit=${circuitAction.level}`,
@@ -146,7 +151,10 @@ export class HealthMonitorService {
       );
 
       const newScore = this.clampScore(instance.health_score - 25);
-      const circuitAction = this.getCircuitAction(newScore, instance.health_score);
+      const circuitAction = this.getCircuitAction(
+        newScore,
+        instance.health_score,
+      );
 
       await this.prisma.instance.update({
         where: { id: instanceId },
@@ -338,7 +346,9 @@ export class HealthMonitorService {
       case 'connecting':
         return 'connecting';
       default:
-        this.logger.warn(`Unknown UazAPI state: "${state}" — treating as disconnected`);
+        this.logger.warn(
+          `Unknown UazAPI state: "${state}" — treating as disconnected`,
+        );
         return 'disconnected';
     }
   }

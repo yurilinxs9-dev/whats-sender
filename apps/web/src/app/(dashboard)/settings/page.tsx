@@ -59,7 +59,12 @@ interface ConnectionStatus {
 }
 
 // ─── Setting Display Helper ─────────────────────────
-function SettingRow({ icon: Icon, label, value, iconColor = 'text-text-secondary' }: {
+function SettingRow({
+  icon: Icon,
+  label,
+  value,
+  iconColor = 'text-text-secondary',
+}: {
   icon: React.ElementType;
   label: string;
   value: string | number | boolean;
@@ -85,7 +90,11 @@ function SettingRow({ icon: Icon, label, value, iconColor = 'text-text-secondary
 }
 
 // ─── Connection Badge ───────────────────────────────
-function ConnectionBadge({ status }: { status: 'connected' | 'disconnected' | 'checking' }) {
+function ConnectionBadge({
+  status,
+}: {
+  status: 'connected' | 'disconnected' | 'checking';
+}) {
   if (status === 'checking') {
     return (
       <Badge variant="outline" className="animate-pulse">
@@ -128,7 +137,9 @@ export default function SettingsPage() {
     try {
       setLoading(true);
       // Try to get tenant settings from auth/me or a settings endpoint
-      const { data } = await api.get<{ user: { tenant?: { settings?: TenantSettings } } }>('/auth/me');
+      const { data } = await api.get<{
+        user: { tenant?: { settings?: TenantSettings } };
+      }>('/auth/me');
       const tenantSettings = data.user?.tenant?.settings;
       if (tenantSettings) {
         setSettings(tenantSettings);
@@ -177,14 +188,26 @@ export default function SettingsPage() {
   // ─── Check Connections ────────────────────────
   const checkConnections = useCallback(async () => {
     setCheckingConnections(true);
-    setConnections({ api: 'checking', redis: 'checking', supabase: 'checking' });
+    setConnections({
+      api: 'checking',
+      redis: 'checking',
+      supabase: 'checking',
+    });
 
     // Check API health
     try {
       await api.get<HealthResponse>('/health');
-      setConnections((prev) => ({ ...prev, api: 'connected', supabase: 'connected' }));
+      setConnections((prev) => ({
+        ...prev,
+        api: 'connected',
+        supabase: 'connected',
+      }));
     } catch {
-      setConnections((prev) => ({ ...prev, api: 'disconnected', supabase: 'disconnected' }));
+      setConnections((prev) => ({
+        ...prev,
+        api: 'disconnected',
+        supabase: 'disconnected',
+      }));
     }
 
     // Check Redis health
@@ -201,7 +224,13 @@ export default function SettingsPage() {
 
   // ─── Role Badge ───────────────────────────────
   const getRoleBadge = (role: string) => {
-    const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+    const map: Record<
+      string,
+      {
+        label: string;
+        variant: 'default' | 'secondary' | 'destructive' | 'outline';
+      }
+    > = {
       OWNER: { label: 'Proprietario', variant: 'default' },
       ADMIN: { label: 'Administrador', variant: 'default' },
       OPERATOR: { label: 'Operador', variant: 'secondary' },
@@ -243,12 +272,12 @@ export default function SettingsPage() {
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-text-primary">{user.nome}</h3>
+                  <h3 className="text-lg font-semibold text-text-primary">
+                    {user.nome}
+                  </h3>
                   <p className="text-sm text-text-secondary">{user.email}</p>
                 </div>
-                <div className="ml-auto">
-                  {getRoleBadge(user.role)}
-                </div>
+                <div className="ml-auto">{getRoleBadge(user.role)}</div>
               </div>
             </div>
           )}
@@ -353,7 +382,9 @@ export default function SettingsPage() {
             onClick={checkConnections}
             disabled={checkingConnections}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${checkingConnections ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${checkingConnections ? 'animate-spin' : ''}`}
+            />
             Verificar Conexoes
           </Button>
         </CardHeader>
@@ -365,8 +396,12 @@ export default function SettingsPage() {
                   <Server className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-text-primary">UazAPI</p>
-                  <p className="text-xs text-text-secondary">Servico de envio WhatsApp</p>
+                  <p className="text-sm font-medium text-text-primary">
+                    UazAPI
+                  </p>
+                  <p className="text-xs text-text-secondary">
+                    Servico de envio WhatsApp
+                  </p>
                 </div>
               </div>
               <ConnectionBadge status={connections.api} />
@@ -380,8 +415,12 @@ export default function SettingsPage() {
                   <Database className="h-4 w-4 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-text-primary">Supabase</p>
-                  <p className="text-xs text-text-secondary">Banco de dados PostgreSQL</p>
+                  <p className="text-sm font-medium text-text-primary">
+                    Supabase
+                  </p>
+                  <p className="text-xs text-text-secondary">
+                    Banco de dados PostgreSQL
+                  </p>
                 </div>
               </div>
               <ConnectionBadge status={connections.supabase} />
@@ -399,8 +438,12 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-text-primary">Redis (Upstash)</p>
-                  <p className="text-xs text-text-secondary">Cache e filas BullMQ</p>
+                  <p className="text-sm font-medium text-text-primary">
+                    Redis (Upstash)
+                  </p>
+                  <p className="text-xs text-text-secondary">
+                    Cache e filas BullMQ
+                  </p>
                 </div>
               </div>
               <ConnectionBadge status={connections.redis} />

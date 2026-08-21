@@ -89,7 +89,11 @@ export class GroupsController {
   runAddJob(@Req() req: Req, @Param('id') id: string, @Body() body: unknown) {
     const parsed = RunAddJobSchema.safeParse(body ?? {});
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.groupsService.runAddJob(req.user.tenantId, id, parsed.data.limit);
+    return this.groupsService.runAddJob(
+      req.user.tenantId,
+      id,
+      parsed.data.limit,
+    );
   }
 
   @Post('add-jobs/:id/retry-failed')
@@ -100,7 +104,11 @@ export class GroupsController {
 
   // Editar configuracoes do job (toggle de convite, mensagem, link, ritmo)
   @Patch('add-jobs/:id')
-  updateAddJob(@Req() req: Req, @Param('id') id: string, @Body() body: unknown) {
+  updateAddJob(
+    @Req() req: Req,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
     const parsed = UpdateAddJobSchema.safeParse(body ?? {});
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.groupsService.updateAddJob(req.user.tenantId, id, parsed.data);

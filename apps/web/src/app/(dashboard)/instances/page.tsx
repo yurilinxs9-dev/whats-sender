@@ -86,16 +86,29 @@ interface QrCodeResponse {
 }
 
 // ─── Status Helpers ─────────────────────────────────
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning'; className?: string }> = {
+const STATUS_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning';
+    className?: string;
+  }
+> = {
   connected: { label: 'Conectado', variant: 'default' },
   disconnected: { label: 'Desconectado', variant: 'secondary' },
   connecting: { label: 'Conectando', variant: 'warning' },
   banned: { label: 'Banido', variant: 'destructive' },
-  cooldown: { label: 'Cooldown', variant: 'warning', className: 'bg-orange-500 text-zinc-950 border-transparent' },
+  cooldown: {
+    label: 'Cooldown',
+    variant: 'warning',
+    className: 'bg-orange-500 text-zinc-950 border-transparent',
+  },
 };
 
 function getStatusConfig(status: string) {
-  return STATUS_CONFIG[status] ?? { label: status, variant: 'outline' as const };
+  return (
+    STATUS_CONFIG[status] ?? { label: status, variant: 'outline' as const }
+  );
 }
 
 function getHealthColor(score: number) {
@@ -133,7 +146,9 @@ export default function InstancesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
+  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(
+    null,
+  );
 
   // Import by token form
   const [importNome, setImportNome] = useState('');
@@ -146,7 +161,6 @@ export default function InstancesPage() {
   const [qrLoading, setQrLoading] = useState(false);
   const qrPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-
   // Form
   const [formNome, setFormNome] = useState('');
   const [formTelefone, setFormTelefone] = useState('');
@@ -157,11 +171,16 @@ export default function InstancesPage() {
   const fetchInstances = useCallback(async () => {
     try {
       setLoading(true);
-      const params: Record<string, string> = { page: String(page), limit: '20' };
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: '20',
+      };
       if (search) params.search = search;
       if (statusFilter !== 'all') params.status = statusFilter;
 
-      const { data } = await api.get<InstancesResponse>('/instances', { params });
+      const { data } = await api.get<InstancesResponse>('/instances', {
+        params,
+      });
       setInstances(data.instances);
       setTotal(data.total);
     } catch {
@@ -183,7 +202,9 @@ export default function InstancesPage() {
     const handler = (data: { instanceName: string; status: string }) => {
       setInstances((prev) =>
         prev.map((inst) =>
-          inst.nome === data.instanceName ? { ...inst, status: data.status } : inst,
+          inst.nome === data.instanceName
+            ? { ...inst, status: data.status }
+            : inst,
         ),
       );
       if (data.status === 'deleted') {
@@ -210,7 +231,10 @@ export default function InstancesPage() {
     connected: instances.filter((i) => i.status === 'connected').length,
     warmingUp: instances.filter((i) => !i.warmup_completed).length,
     avgHealth: instances.length
-      ? Math.round(instances.reduce((sum, i) => sum + i.health_score, 0) / instances.length)
+      ? Math.round(
+          instances.reduce((sum, i) => sum + i.health_score, 0) /
+            instances.length,
+        )
       : 0,
   };
 
@@ -246,7 +270,9 @@ export default function InstancesPage() {
 
     try {
       // Trigger connect to get QR
-      const { data } = await api.post<QrCodeResponse>(`/instances/${instance.id}/connect`);
+      const { data } = await api.post<QrCodeResponse>(
+        `/instances/${instance.id}/connect`,
+      );
       setQrCode(data.qrcode);
       setQrStatus(data.status);
 
@@ -270,7 +296,9 @@ export default function InstancesPage() {
 
     qrPollingRef.current = setInterval(async () => {
       try {
-        const { data } = await api.get<QrCodeResponse>(`/instances/${instanceId}/qrcode`);
+        const { data } = await api.get<QrCodeResponse>(
+          `/instances/${instanceId}/qrcode`,
+        );
 
         if (data.status === 'connected') {
           setQrStatus('connected');
@@ -331,7 +359,9 @@ export default function InstancesPage() {
       fetchInstances();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message ?? 'Erro ao atualizar instancia');
+      toast.error(
+        error.response?.data?.message ?? 'Erro ao atualizar instancia',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -393,7 +423,10 @@ export default function InstancesPage() {
       fetchInstances();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message ?? 'Token invalido ou instancia nao encontrada');
+      toast.error(
+        error.response?.data?.message ??
+          'Token invalido ou instancia nao encontrada',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -406,14 +439,21 @@ export default function InstancesPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Smartphone className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-text-primary">Instancias WhatsApp</h1>
+          <h1 className="text-2xl font-bold text-text-primary">
+            Instancias WhatsApp
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <KeyRound className="mr-2 h-4 w-4" />
             Importar por Token
           </Button>
-          <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+          <Button
+            onClick={() => {
+              resetForm();
+              setCreateOpen(true);
+            }}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nova Instancia
           </Button>
@@ -429,7 +469,9 @@ export default function InstancesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Total</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.total}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.total}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -440,7 +482,9 @@ export default function InstancesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Conectadas</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.connected}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.connected}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -451,7 +495,9 @@ export default function InstancesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Aquecendo</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.warmingUp}</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.warmingUp}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -462,7 +508,9 @@ export default function InstancesPage() {
             </div>
             <div>
               <p className="text-sm text-text-secondary">Saude Media</p>
-              <p className="text-2xl font-bold text-text-primary">{stats.avgHealth}%</p>
+              <p className="text-2xl font-bold text-text-primary">
+                {stats.avgHealth}%
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -476,10 +524,19 @@ export default function InstancesPage() {
             placeholder="Buscar por nome..."
             className="pl-9"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        >
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filtrar status" />
           </SelectTrigger>
@@ -505,11 +562,19 @@ export default function InstancesPage() {
         <Card>
           <CardContent className="p-12 flex flex-col items-center justify-center text-center">
             <Smartphone className="h-12 w-12 text-text-secondary mb-4" />
-            <h3 className="text-lg font-semibold text-text-primary mb-1">Nenhuma instancia</h3>
+            <h3 className="text-lg font-semibold text-text-primary mb-1">
+              Nenhuma instancia
+            </h3>
             <p className="text-text-secondary mb-4">
-              Crie sua primeira instancia WhatsApp para comecar a enviar mensagens.
+              Crie sua primeira instancia WhatsApp para comecar a enviar
+              mensagens.
             </p>
-            <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+            <Button
+              onClick={() => {
+                resetForm();
+                setCreateOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nova Instancia
             </Button>
@@ -520,7 +585,10 @@ export default function InstancesPage() {
           {instances.map((instance) => {
             const statusCfg = getStatusConfig(instance.status);
             return (
-              <Card key={instance.id} className="hover:border-border/80 transition-colors">
+              <Card
+                key={instance.id}
+                className="hover:border-border/80 transition-colors"
+              >
                 <CardContent className="p-4">
                   <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                     {/* Name & Phone */}
@@ -529,7 +597,10 @@ export default function InstancesPage() {
                         <h3 className="font-semibold text-text-primary truncate">
                           {instance.nome}
                         </h3>
-                        <Badge variant={statusCfg.variant} className={statusCfg.className}>
+                        <Badge
+                          variant={statusCfg.variant}
+                          className={statusCfg.className}
+                        >
                           {statusCfg.label}
                         </Badge>
                       </div>
@@ -541,7 +612,9 @@ export default function InstancesPage() {
                     {/* Health */}
                     <div className="w-32">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-text-secondary">Saude</span>
+                        <span className="text-xs text-text-secondary">
+                          Saude
+                        </span>
                         <span className="text-xs font-medium text-text-primary">
                           {instance.health_score}%
                         </span>
@@ -556,7 +629,9 @@ export default function InstancesPage() {
 
                     {/* Warmup */}
                     <div className="text-center">
-                      <span className="text-xs text-text-secondary block mb-1">Warmup</span>
+                      <span className="text-xs text-text-secondary block mb-1">
+                        Warmup
+                      </span>
                       <Badge variant="outline" className="text-xs">
                         {instance.warmup_completed
                           ? 'Completo'
@@ -566,7 +641,9 @@ export default function InstancesPage() {
 
                     {/* Daily */}
                     <div className="text-center">
-                      <span className="text-xs text-text-secondary block mb-1">Envios Hoje</span>
+                      <span className="text-xs text-text-secondary block mb-1">
+                        Envios Hoje
+                      </span>
                       <div className="flex items-center gap-1">
                         <BarChart3 className="h-3 w-3 text-text-secondary" />
                         <span className="text-sm font-medium text-text-primary">
@@ -626,7 +703,8 @@ export default function InstancesPage() {
       {!loading && instances.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-text-secondary">
-            {total} instancia{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
+            {total} instancia{total !== 1 ? 's' : ''} encontrada
+            {total !== 1 ? 's' : ''}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -656,7 +734,8 @@ export default function InstancesPage() {
           <DialogHeader>
             <DialogTitle>Nova Instancia</DialogTitle>
             <DialogDescription>
-              Defina um nome para a instancia. Apos criar, escaneie o QR Code com seu WhatsApp.
+              Defina um nome para a instancia. Apos criar, escaneie o QR Code
+              com seu WhatsApp.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -667,7 +746,9 @@ export default function InstancesPage() {
                 placeholder="Ex: Vendas-01"
                 value={formNome}
                 onChange={(e) => setFormNome(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && formNome.trim() && handleCreate()}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && formNome.trim() && handleCreate()
+                }
               />
               <p className="text-xs text-text-secondary">
                 Use um nome unico sem espacos (ex: vendas-01, suporte-principal)
@@ -675,10 +756,17 @@ export default function InstancesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleCreate} disabled={submitting || !formNome.trim()}>
+            <Button
+              onClick={handleCreate}
+              disabled={submitting || !formNome.trim()}
+            >
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -696,7 +784,12 @@ export default function InstancesPage() {
       </Dialog>
 
       {/* ─── QR Code Dialog ──────────────────────── */}
-      <Dialog open={qrOpen} onOpenChange={(open) => { if (!open) closeQrDialog(); }}>
+      <Dialog
+        open={qrOpen}
+        onOpenChange={(open) => {
+          if (!open) closeQrDialog();
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -718,14 +811,18 @@ export default function InstancesPage() {
             {qrLoading ? (
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-text-secondary">Gerando QR Code...</p>
+                <p className="text-sm text-text-secondary">
+                  Gerando QR Code...
+                </p>
               </div>
             ) : qrStatus === 'connected' ? (
               <div className="flex flex-col items-center gap-4">
                 <div className="rounded-full bg-primary/10 p-6">
                   <CheckCircle2 className="h-16 w-16 text-primary" />
                 </div>
-                <p className="text-lg font-semibold text-text-primary">Conectado!</p>
+                <p className="text-lg font-semibold text-text-primary">
+                  Conectado!
+                </p>
                 <p className="text-sm text-text-secondary text-center">
                   Sua instancia esta pronta para enviar mensagens.
                 </p>
@@ -756,7 +853,9 @@ export default function InstancesPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => selectedInstance && openQrDialog(selectedInstance)}
+                  onClick={() =>
+                    selectedInstance && openQrDialog(selectedInstance)
+                  }
                 >
                   Tentar Novamente
                 </Button>
@@ -814,10 +913,17 @@ export default function InstancesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleEdit} disabled={submitting || !formNome.trim()}>
+            <Button
+              onClick={handleEdit}
+              disabled={submitting || !formNome.trim()}
+            >
               {submitting ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
@@ -833,7 +939,8 @@ export default function InstancesPage() {
               Importar Instancia por Token
             </DialogTitle>
             <DialogDescription>
-              Use o token de uma instancia ja existente na UazAPI. Util para numeros ja conectados em outro sistema.
+              Use o token de uma instancia ja existente na UazAPI. Util para
+              numeros ja conectados em outro sistema.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -870,7 +977,11 @@ export default function InstancesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setImportOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
             <Button
@@ -900,14 +1011,23 @@ export default function InstancesPage() {
             <DialogTitle>Excluir Instancia</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir a instancia{' '}
-              <strong>{selectedInstance?.nome}</strong>? Esta acao nao pode ser desfeita.
+              <strong>{selectedInstance?.nome}</strong>? Esta acao nao pode ser
+              desfeita.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={submitting}
+            >
               {submitting ? 'Excluindo...' : 'Excluir'}
             </Button>
           </DialogFooter>

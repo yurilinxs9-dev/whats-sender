@@ -9,7 +9,10 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('sender-access-token') : null;
+  const token =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('sender-access-token')
+      : null;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -37,7 +40,10 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         localStorage.removeItem('sender-access-token');
-        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        if (
+          typeof window !== 'undefined' &&
+          !window.location.pathname.includes('/login')
+        ) {
           window.location.href = '/login';
         }
       }
