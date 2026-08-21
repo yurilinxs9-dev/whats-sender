@@ -32,7 +32,8 @@ services:
     container_name: sender-backend
     restart: unless-stopped
     ports:
-      - '3001:3001'
+      # A VPS publica em 3003 (o nginx aponta pra la); local usa 3001.
+      - '${API_PORT:-3001}:3001'
     depends_on:
       - sender-db
       - sender-redis

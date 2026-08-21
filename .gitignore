@@ -9,3 +9,6 @@ dist/
 .DS_Store
 coverage/
 .prisma/
+
+# Config real do aggregator (URLs internas + secret do CRM)
+aggregator/routes.json

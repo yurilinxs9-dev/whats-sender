@@ -24,24 +24,49 @@
 const express = require('express');
 
 /* ========================================================================
- * CONFIG — mapeie cada numero COMPARTILHADO (instanceName na UazAPI) para a
- * lista de URLs de destino. Para o CRM, cole a URL EXATA que ja esta
- * registrada hoje no painel da UazAPI para aquele numero.
+ * CONFIG — o mapa de rotas vive FORA do git, num JSON montado no container
+ * (ROUTES_FILE, por padrao ./routes.json). Ele carrega URLs internas e, no
+ * caso do CRM, um secret — e muda por servidor. Enquanto morava aqui dentro,
+ * cada deploy sobrescrevia a configuracao real de producao.
+ *
+ * Formato do arquivo:
+ *   { "nome-da-instancia": ["http://localhost:3010/api/webhooks/whatsapp"] }
  *
  * Portas (de `docker ps` / netstat na VPS):
- *   tracking-rm : 3010  → /api/webhooks/whatsapp   (sem secret)
- *   disparador  : 3003  → /api/webhook/uazapi      (sem secret)
- *   crm         : 3001  → URL por-instancia com UUID+secret (copiar do painel)
+ *   tracking-rm : 3010  -> /api/webhooks/whatsapp   (sem secret)
+ *   disparador  : 3003  -> /api/webhook/uazapi      (sem secret)
+ *   crm         : 3001  -> URL por-instancia com UUID+secret (copiar do painel)
  * ===================================================================== */
-const ROUTES = {
-  // EXEMPLO — troque "NOME-DA-INSTANCIA" pelo instanceName real do numero compartilhado:
-  //
-  // 'NOME-DA-INSTANCIA': [
-  //   'http://localhost:3010/api/webhooks/whatsapp',
-  //   'http://localhost:3003/api/webhook/uazapi',
-  //   'http://localhost:3001/api/webhook/uazapi/<CRM-INSTANCE-UUID>/<CRM-SECRET>',
-  // ],
-};
+const fs = require('fs');
+const path = require('path');
+
+const ROUTES_FILE =
+  process.env.ROUTES_FILE || path.join(__dirname, 'routes.json');
+
+function loadRoutes() {
+  try {
+    const raw = fs.readFileSync(ROUTES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    const count = Object.keys(parsed).length;
+    console.log(
+      `[aggregator] ${count} instancia(s) carregada(s) de ${ROUTES_FILE}`,
+    );
+    return parsed;
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      // Sem arquivo o servico sobe inerte: responde 200 e nao encaminha nada.
+      // Melhor que cair, e o log diz exatamente o que falta.
+      console.warn(
+        `[aggregator] ${ROUTES_FILE} nao existe — nenhum evento sera encaminhado`,
+      );
+    } else {
+      console.error(`[aggregator] ${ROUTES_FILE} invalido: ${err.message}`);
+    }
+    return {};
+  }
+}
+
+const ROUTES = loadRoutes();
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 // Secret no path do aggregator: a UazAPI registra /webhook/<SECRET>. Bloqueia POSTs aleatorios.

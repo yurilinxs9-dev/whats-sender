@@ -1,0 +1,8 @@
+{
+  "_comentario": "Copie para routes.json (fora do git) e ajuste. A chave e o instanceName na UazAPI.",
+  "nome-da-instancia": [
+    "http://localhost:3010/api/webhooks/whatsapp",
+    "http://localhost:3003/api/webhook/uazapi",
+    "http://localhost:3001/api/webhook/uazapi/<CRM-INSTANCE-UUID>/<CRM-SECRET>"
+  ]
+}
