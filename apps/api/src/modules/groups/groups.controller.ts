@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Body,
@@ -14,6 +15,8 @@ import { GroupsService } from './groups.service';
 import {
   CreateExtractionSchema,
   CreateAddJobSchema,
+  UpdateAddJobSchema,
+  SendInviteSchema,
   RunAddJobSchema,
 } from './dto/group.dto';
 import type { AuthUser } from '../../common/types/auth-user';
@@ -90,8 +93,26 @@ export class GroupsController {
   }
 
   @Post('add-jobs/:id/retry-failed')
+  @HttpCode(HttpStatus.OK)
   retryFailed(@Req() req: Req, @Param('id') id: string) {
-    return this.service.retryFailedTargets(req.user.tenantId, id);
+    return this.groupsService.retryFailedTargets(req.user.tenantId, id);
+  }
+
+  // Editar configuracoes do job (toggle de convite, mensagem, link, ritmo)
+  @Patch('add-jobs/:id')
+  updateAddJob(@Req() req: Req, @Param('id') id: string, @Body() body: unknown) {
+    const parsed = UpdateAddJobSchema.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.groupsService.updateAddJob(req.user.tenantId, id, parsed.data);
+  }
+
+  // Convite manual: sem target_ids envia para todos os alvos que falharam
+  @Post('add-jobs/:id/invite')
+  @HttpCode(HttpStatus.OK)
+  sendInvites(@Req() req: Req, @Param('id') id: string, @Body() body: unknown) {
+    const parsed = SendInviteSchema.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.groupsService.sendInvites(req.user.tenantId, id, parsed.data);
   }
 
   @Post('add-jobs/:id/pause')

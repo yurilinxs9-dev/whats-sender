@@ -10,7 +10,12 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { UazApiService } from '../uazapi/uazapi.service';
 import { SenderGateway } from '../websocket/websocket.gateway';
 import { QUEUE_GROUP_ADD } from '../queues/queue-constants';
-import { CreateExtractionDto, CreateAddJobDto } from './dto/group.dto';
+import {
+  CreateExtractionDto,
+  CreateAddJobDto,
+  UpdateAddJobDto,
+  SendInviteDto,
+} from './dto/group.dto';
 import type { GroupAddJobData } from '../queues/workers/group-add.worker';
 
 @Injectable()
@@ -164,6 +169,8 @@ export class GroupsService {
         delay_min_s: dto.delay_min_s,
         delay_max_s: dto.delay_max_s,
         send_invite_on_fail: dto.send_invite_on_fail,
+        invite_link: dto.invite_link ?? null,
+        ...(dto.invite_message && { invite_message: dto.invite_message }),
         status: 'IDLE',
       },
     });
@@ -246,6 +253,66 @@ export class GroupsService {
     this.gateway.emitAddJobProgress(id, { status: 'RUNNING', queued: pending.length }, tenantId);
     this.logger.log(`AddJob ${id}: ${pending.length} alvos enfileirados (limite ${limit})`);
     return { queued: pending.length };
+  }
+
+  async updateAddJob(tenantId: string, id: string, dto: UpdateAddJobDto) {
+    await this.assertAddJob(tenantId, id);
+    await this.prisma.groupAddJob.update({
+      where: { id },
+      data: {
+        ...(dto.nome !== undefined && { nome: dto.nome }),
+        ...(dto.per_run_limit !== undefined && { per_run_limit: dto.per_run_limit }),
+        ...(dto.daily_add_cap !== undefined && { daily_add_cap: dto.daily_add_cap }),
+        ...(dto.delay_min_s !== undefined && { delay_min_s: dto.delay_min_s }),
+        ...(dto.delay_max_s !== undefined && { delay_max_s: dto.delay_max_s }),
+        ...(dto.send_invite_on_fail !== undefined && { send_invite_on_fail: dto.send_invite_on_fail }),
+        ...(dto.invite_link !== undefined && { invite_link: dto.invite_link }),
+        ...(dto.invite_message !== undefined && { invite_message: dto.invite_message }),
+      },
+    });
+    return this.getAddJob(tenantId, id);
+  }
+
+  /**
+   * Envia o link de convite por mensagem privada.
+   * Sem target_ids envia para todos os alvos FAILED (envio em massa).
+   * Espacado com o mesmo delay do job — convite tambem e disparo, tambem queima numero.
+   */
+  async sendInvites(tenantId: string, id: string, dto: SendInviteDto) {
+    const job = await this.assertAddJob(tenantId, id);
+    if (!job.invite_link) {
+      throw new BadRequestException('Job sem link de convite. Cole o link do grupo nas configuracoes.');
+    }
+
+    const targets = await this.prisma.addTarget.findMany({
+      where: {
+        job_id: id,
+        ...(dto.target_ids ? { id: { in: dto.target_ids } } : { status: 'FAILED' }),
+      },
+      select: { id: true },
+    });
+    if (targets.length === 0) throw new BadRequestException('Nenhum alvo para convidar');
+
+    let cumMs = 0;
+    for (const target of targets) {
+      const gapS = job.delay_min_s + Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
+      cumMs += Math.round(gapS * 1000);
+      await this.groupAddQueue.add(
+        'invite-target',
+        { jobId: id, targetId: target.id, tenantId, mode: 'invite' },
+        {
+          delay: cumMs,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 },
+          removeOnComplete: { count: 1000 },
+          removeOnFail: { count: 500 },
+        },
+      );
+    }
+
+    this.gateway.emitAddJobProgress(id, { invites_queued: targets.length }, tenantId);
+    this.logger.log(`AddJob ${id}: ${targets.length} convites enfileirados`);
+    return { queued: targets.length };
   }
 
   // Devolve alvos FAILED para PENDING (ex.: falha por bug de integracao, nao por bloqueio).

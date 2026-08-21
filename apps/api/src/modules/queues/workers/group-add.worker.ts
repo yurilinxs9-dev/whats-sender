@@ -10,6 +10,9 @@ export interface GroupAddJobData {
   jobId: string;
   targetId: string;
   tenantId: string;
+  // 'invite' = envio manual de convite disparado pelo painel.
+  // Ausente = adicao normal (compatibilidade com jobs ja enfileirados).
+  mode?: 'add' | 'invite';
 }
 
 const DAILY_RESET_HOUR = 0;
@@ -39,12 +42,26 @@ export class GroupAddWorker extends WorkerHost {
   }
 
   async process(job: Job<GroupAddJobData>): Promise<void> {
-    const { jobId, targetId, tenantId } = job.data;
+    const { jobId, targetId, tenantId, mode } = job.data;
 
     const addJob = await this.prisma.groupAddJob.findUnique({
       where: { id: jobId },
       include: { dest_instance: true },
     });
+
+    if (mode === 'invite') {
+      if (!addJob) return;
+      const inviteToken = extractToken(addJob.dest_instance?.config);
+      if (!inviteToken) {
+        await this.markTarget(targetId, 'FAILED', 'instância destino sem token UazAPI');
+        return;
+      }
+      const inviteTarget = await this.prisma.addTarget.findUnique({ where: { id: targetId } });
+      if (!inviteTarget) return;
+      await this.sendInvite(addJob, inviteToken, inviteTarget.id, inviteTarget.phone || inviteTarget.member_jid);
+      await this.emitAndMaybeComplete(jobId, tenantId);
+      return;
+    }
     if (!addJob || addJob.status === 'PAUSED' || addJob.status === 'FAILED' || addJob.status === 'COMPLETED') {
       await this.markTarget(targetId, 'SKIPPED');
       return;
@@ -100,13 +117,16 @@ export class GroupAddWorker extends WorkerHost {
           data: { added_count: { increment: 1 }, added_today: { increment: 1 } },
         });
       } else {
-        // send_invite_on_fail: toggle existe mas convite está em STANDBY (fase 2).
-        // Por ora só registra o motivo da falha.
-        await this.markTarget(targetId, 'FAILED', errorStatus ?? 'falha desconhecida');
+        const reason = errorStatus ?? 'falha desconhecida';
+        await this.markTarget(targetId, 'FAILED', reason);
         await this.prisma.groupAddJob.update({
           where: { id: jobId },
           data: { failed_count: { increment: 1 } },
         });
+        // Fallback automatico: so quando o toggle esta ligado E existe link cadastrado.
+        if (addJob.send_invite_on_fail && addJob.invite_link) {
+          await this.sendInvite(addJob, token, targetId, memberId, reason);
+        }
       }
 
       await this.emitAndMaybeComplete(jobId, tenantId);
@@ -118,6 +138,46 @@ export class GroupAddWorker extends WorkerHost {
         data: { failed_count: { increment: 1 } },
       });
       await this.emitAndMaybeComplete(jobId, tenantId);
+    }
+  }
+
+  /**
+   * Manda o link de convite no privado e marca o alvo como INVITED.
+   * Mantem o motivo original da falha no campo `error` — o relatorio precisa
+   * mostrar POR QUE a adicao direta nao funcionou, nao so que houve convite.
+   */
+  private async sendInvite(
+    addJob: { id: string; invite_link: string | null; invite_message: string },
+    token: string,
+    targetId: string,
+    phone: string,
+    addFailureReason?: string,
+  ): Promise<void> {
+    if (!addJob.invite_link) return;
+    const text = addJob.invite_message.replace(/\{link\}/g, addJob.invite_link);
+    try {
+      const res = await this.uazapi.sendText(token, phone, text);
+      if (!res.success) throw new Error(res.error ?? 'falha ao enviar convite');
+      await this.prisma.addTarget.update({
+        where: { id: targetId },
+        data: {
+          status: 'INVITED',
+          invited_at: new Date(),
+          ...(addFailureReason && { error: `${addFailureReason} — convite enviado` }),
+        },
+      });
+      await this.prisma.groupAddJob.update({
+        where: { id: addJob.id },
+        data: { invited_count: { increment: 1 } },
+      });
+    } catch (error) {
+      const msg = (error as Error).message;
+      this.logger.warn(`Convite falhou para ${phone}: ${msg}`);
+      await this.markTarget(
+        targetId,
+        'FAILED',
+        addFailureReason ? `${addFailureReason} — convite tambem falhou: ${msg}` : `convite falhou: ${msg}`,
+      );
     }
   }
 

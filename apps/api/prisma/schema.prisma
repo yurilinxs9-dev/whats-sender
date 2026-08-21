@@ -489,6 +489,9 @@ model GroupAddJob {
   delay_min_s         Int             @default(30)
   delay_max_s         Int             @default(90)
   send_invite_on_fail Boolean         @default(false)
+  invite_link         String?
+  invite_message      String          @default("Oi! Nao consegui te adicionar direto no grupo (sua privacidade do WhatsApp bloqueia). Entra por aqui: {link}")
+  invited_count       Int             @default(0)
   added_count         Int             @default(0)
   failed_count        Int             @default(0)
   skipped_count       Int             @default(0)
@@ -523,6 +526,7 @@ model AddTarget {
   attempts   Int             @default(0)
   error      String?
   added_at   DateTime?
+  invited_at DateTime?
   created_at DateTime        @default(now())
 
   @@unique([job_id, member_jid])

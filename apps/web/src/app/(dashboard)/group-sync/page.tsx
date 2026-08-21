@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Send,
+  Settings2,
+  Link2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -23,6 +26,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -69,6 +73,9 @@ interface AddJob {
   delay_min_s: number;
   delay_max_s: number;
   send_invite_on_fail: boolean;
+  invite_link: string | null;
+  invite_message: string;
+  invited_count: number;
   added_count: number;
   failed_count: number;
   skipped_count: number;
@@ -79,7 +86,7 @@ interface AddJob {
   extraction: { nome: string; source_group_name: string };
   _count?: { targets: number };
 }
-interface AddTarget { id: string; member_jid: string; phone: string; status: string; attempts: number; error?: string | null; added_at?: string | null }
+interface AddTarget { id: string; member_jid: string; phone: string; status: string; attempts: number; error?: string | null; added_at?: string | null; invited_at?: string | null }
 interface AddJobDetail extends AddJob { targets: AddTarget[] }
 
 // ─── Status config ───────────────────────────────────
@@ -96,6 +103,9 @@ const JOB_STATUS: Record<string, { label: string; cls: string }> = {
   COMPLETED: { label: 'Concluído',   cls: 'bg-green-900/30 text-green-400' },
   FAILED:    { label: 'Erro',        cls: 'bg-danger/20 text-danger' },
 };
+const DEFAULT_INVITE_MSG =
+  'Oi! Nao consegui te adicionar direto no grupo (sua privacidade do WhatsApp bloqueia). Entra por aqui: {link}';
+
 const TARGET_STATUS: Record<string, { label: string; cls: string }> = {
   PENDING:    { label: 'Pendente',  cls: 'text-zinc-400' },
   PROCESSING: { label: 'Em curso',  cls: 'text-warning' },
@@ -398,6 +408,7 @@ function AddJobsTab() {
   const [form, setForm] = useState({
     nome: '', extraction_id: '', dest_instance_id: '', dest_group_jid: '',
     per_run_limit: '50', daily_add_cap: '50', delay_min_s: '30', delay_max_s: '90', send_invite_on_fail: false,
+    invite_link: '', invite_message: DEFAULT_INVITE_MSG,
   });
 
   const fetchItems = useCallback(async () => {
@@ -439,10 +450,12 @@ function AddJobsTab() {
         delay_min_s: Number(form.delay_min_s),
         delay_max_s: Number(form.delay_max_s),
         send_invite_on_fail: form.send_invite_on_fail,
+        invite_link: form.invite_link.trim() || null,
+        invite_message: form.invite_message,
       });
       toast.success('Job de adição criado');
       setShow(false);
-      setForm({ nome: '', extraction_id: '', dest_instance_id: '', dest_group_jid: '', per_run_limit: '50', daily_add_cap: '50', delay_min_s: '30', delay_max_s: '90', send_invite_on_fail: false });
+      setForm({ nome: '', extraction_id: '', dest_instance_id: '', dest_group_jid: '', per_run_limit: '50', daily_add_cap: '50', delay_min_s: '30', delay_max_s: '90', send_invite_on_fail: false, invite_link: '', invite_message: DEFAULT_INVITE_MSG });
       setWaGroups([]);
       fetchItems();
     } catch (e) { toast.error(errMsg(e, 'Erro ao criar job')); }
@@ -454,6 +467,8 @@ function AddJobsTab() {
     catch (e) { toast.error(errMsg(e, 'Erro ao rodar')); }
     finally { setBusy(null); }
   }
+  const [settings, setSettings] = useState<AddJob | null>(null);
+
   async function retryFailed(id: string) {
     setBusy(id + ':retry');
     try {
@@ -527,6 +542,7 @@ function AddJobsTab() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <Button size="sm" variant="outline" onClick={() => setSettings(j)} className="gap-1.5"><Settings2 className="h-3 w-3" />Config</Button>
                         <Button size="sm" variant="outline" onClick={() => openReport(j.id)} className="gap-1.5"><FileBarChart className="h-3 w-3" />Relatório</Button>
                         {canRun && <Button size="sm" onClick={() => run(j.id)} disabled={busy === j.id + ':run'} className="gap-1.5">{busy === j.id + ':run' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}Rodar lote</Button>}
                         {j.failed_count > 0 && j.status !== 'RUNNING' && <Button size="sm" variant="outline" onClick={() => retryFailed(j.id)} disabled={busy === j.id + ':retry'} className="gap-1.5">{busy === j.id + ':retry' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}Re-tentar falhas</Button>}
@@ -603,17 +619,14 @@ function AddJobsTab() {
               </div>
             </div>
 
-            {/* Toggle convite — VISUAL, em standby (fase 2) */}
-            <button type="button" onClick={() => setForm((f) => ({ ...f, send_invite_on_fail: !f.send_invite_on_fail }))}
-              className="w-full flex items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2.5 text-left">
-              <div>
-                <p className="text-sm text-text-primary">Enviar convite por DM se a adição falhar</p>
-                <p className="text-xs text-text-secondary">Em breve — privacidade do contato bloqueia adição direta</p>
-              </div>
-              <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${form.send_invite_on_fail ? 'bg-primary' : 'bg-zinc-700'}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.send_invite_on_fail ? 'translate-x-4' : 'translate-x-0.5'}`} />
-              </span>
-            </button>
+            <InviteFields
+              enabled={form.send_invite_on_fail}
+              link={form.invite_link}
+              message={form.invite_message}
+              onToggle={() => setForm((f) => ({ ...f, send_invite_on_fail: !f.send_invite_on_fail }))}
+              onLink={(v) => setForm((f) => ({ ...f, invite_link: v }))}
+              onMessage={(v) => setForm((f) => ({ ...f, invite_message: v }))}
+            />
 
             <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 flex gap-2">
               <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
@@ -629,31 +642,56 @@ function AddJobsTab() {
         </DialogContent>
       </Dialog>
 
+      {settings && (
+        <AddJobSettings
+          job={settings}
+          onClose={() => setSettings(null)}
+          onSaved={() => { setSettings(null); fetchItems(); }}
+        />
+      )}
+
       {/* Dialog relatório job */}
       <Dialog open={!!report} onOpenChange={(o) => !o && setReport(null)}>
         <DialogContent className="sm:max-w-2xl bg-surface border-border">
           <DialogHeader><DialogTitle>Relatório — {report?.nome}</DialogTitle></DialogHeader>
-          {report && <AddJobReport job={report} />}
+          {report && <AddJobReport job={report} onChanged={() => { openReport(report.id); fetchItems(); }} />}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function AddJobReport({ job }: { job: AddJobDetail }) {
+function AddJobReport({ job, onChanged }: { job: AddJobDetail; onChanged: () => void }) {
+  const [sending, setSending] = useState<string | null>(null);
   const counts = job.targets.reduce<Record<string, number>>((acc, t) => { acc[t.status] = (acc[t.status] ?? 0) + 1; return acc; }, {});
   const failed = job.targets.filter((t) => t.status === 'FAILED');
+  const canInvite = !!job.invite_link;
+
+  async function invite(targetIds?: string[]) {
+    if (!canInvite) { toast.error('Cadastre o link de convite em Config antes de convidar'); return; }
+    setSending(targetIds?.length === 1 ? targetIds[0] : 'bulk');
+    try {
+      const { data } = await api.post<{ queued: number }>(
+        `/groups/add-jobs/${job.id}/invite`,
+        targetIds ? { target_ids: targetIds } : {},
+      );
+      toast.success(`${data.queued} convite(s) na fila`);
+      onChanged();
+    } catch (e) { toast.error(errMsg(e, 'Erro ao enviar convite')); }
+    finally { setSending(null); }
+  }
   // motivos agrupados
   const reasons = failed.reduce<Record<string, number>>((acc, t) => { const r = t.error ?? 'desconhecido'; acc[r] = (acc[r] ?? 0) + 1; return acc; }, {});
   function exportCsv() {
-    const rows = [['phone', 'status', 'tentativas', 'erro', 'adicionado_em'],
-      ...job.targets.map((t) => [t.phone, t.status, String(t.attempts), t.error ?? '', t.added_at ?? ''])];
+    const rows = [['phone', 'status', 'tentativas', 'erro', 'adicionado_em', 'convidado_em'],
+      ...job.targets.map((t) => [t.phone, t.status, String(t.attempts), t.error ?? '', t.added_at ?? '', t.invited_at ?? ''])];
     downloadCsv(rows, `adicao-${job.nome}.csv`);
   }
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <Stat icon={<CheckCircle2 className="h-4 w-4 text-green-400" />} label="Adicionados" value={counts.DONE ?? 0} />
+        <Stat icon={<Send className="h-4 w-4 text-blue-400" />} label="Convidados" value={counts.INVITED ?? 0} />
         <Stat icon={<XCircle className="h-4 w-4 text-danger" />} label="Falhas" value={counts.FAILED ?? 0} />
         <Stat icon={<Clock className="h-4 w-4 text-zinc-400" />} label="Pendentes" value={(counts.PENDING ?? 0) + (counts.PROCESSING ?? 0)} />
       </div>
@@ -667,6 +705,24 @@ function AddJobReport({ job }: { job: AddJobDetail }) {
           </div>
         </div>
       )}
+      {failed.length > 0 && (
+        <div className="rounded-lg border border-border p-3 flex items-center gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-text-primary">{failed.length} números não entraram</p>
+            <p className="text-xs text-text-secondary">
+              {canInvite
+                ? 'Mande o link de convite no privado para todos de uma vez.'
+                : 'Cadastre o link de convite em Config para liberar o envio.'}
+            </p>
+          </div>
+          <Button size="sm" className="gap-1.5 ml-auto shrink-0" disabled={!canInvite || sending === 'bulk'}
+            onClick={() => invite()}>
+            {sending === 'bulk' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+            Convidar todos
+          </Button>
+        </div>
+      )}
+
       <div className="flex justify-end">
         <Button size="sm" variant="outline" className="gap-1.5" onClick={exportCsv}><Download className="h-3 w-3" />Exportar CSV</Button>
       </div>
@@ -675,10 +731,121 @@ function AddJobReport({ job }: { job: AddJobDetail }) {
           <div key={t.id} className="flex items-center justify-between px-3 py-1.5 text-xs gap-2">
             <span className="text-text-primary shrink-0">{t.phone || t.member_jid}</span>
             <span className={`${TARGET_STATUS[t.status]?.cls ?? 'text-zinc-400'} shrink-0`}>{TARGET_STATUS[t.status]?.label ?? t.status}</span>
-            {t.error && <span className="text-text-secondary truncate ml-auto">{t.error}</span>}
+            {t.error && <span className="text-text-secondary truncate">{t.error}</span>}
+            {t.status === 'FAILED' && (
+              <Button size="sm" variant="ghost" className="h-6 gap-1 ml-auto shrink-0 text-xs"
+                disabled={!canInvite || sending === t.id} onClick={() => invite([t.id])}
+                title={canInvite ? 'Enviar link de convite no privado' : 'Cadastre o link em Config'}>
+                {sending === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                Convidar
+              </Button>
+            )}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Configuracoes do job depois de criado: liga/desliga convite, edita link,
+// mensagem e ritmo sem precisar recriar o job (e perder o progresso).
+function AddJobSettings({ job, onClose, onSaved }: { job: AddJob; onClose: () => void; onSaved: () => void }) {
+  const [enabled, setEnabled] = useState(job.send_invite_on_fail);
+  const [link, setLink] = useState(job.invite_link ?? '');
+  const [message, setMessage] = useState(job.invite_message || DEFAULT_INVITE_MSG);
+  const [perRun, setPerRun] = useState(String(job.per_run_limit));
+  const [cap, setCap] = useState(String(job.daily_add_cap));
+  const [dMin, setDMin] = useState(String(job.delay_min_s));
+  const [dMax, setDMax] = useState(String(job.delay_max_s));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (enabled && !link.trim()) { toast.error('Cole o link de convite ou desligue o fallback'); return; }
+    if (enabled && !message.includes('{link}')) { toast.error('A mensagem precisa conter {link}'); return; }
+    setSaving(true);
+    try {
+      await api.patch(`/groups/add-jobs/${job.id}`, {
+        per_run_limit: Number(perRun) || job.per_run_limit,
+        daily_add_cap: Number(cap) || job.daily_add_cap,
+        delay_min_s: Number(dMin) || job.delay_min_s,
+        delay_max_s: Number(dMax) || job.delay_max_s,
+        send_invite_on_fail: enabled,
+        invite_link: link.trim() || null,
+        invite_message: message,
+      });
+      toast.success('Configurações salvas');
+      onSaved();
+    } catch (e) { toast.error(errMsg(e, 'Erro ao salvar')); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg bg-surface border-border">
+        <DialogHeader><DialogTitle>Configurações — {job.nome}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1"><Label className="text-xs">Limite por rodada</Label><Input value={perRun} onChange={(e) => setPerRun(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">Cap diário</Label><Input value={cap} onChange={(e) => setCap(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">Delay mín (s)</Label><Input value={dMin} onChange={(e) => setDMin(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">Delay máx (s)</Label><Input value={dMax} onChange={(e) => setDMax(e.target.value)} /></div>
+          </div>
+          <InviteFields
+            enabled={enabled} link={link} message={message}
+            onToggle={() => setEnabled((v) => !v)} onLink={setLink} onMessage={setMessage}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Bloco de convite reutilizado na criacao e nas configuracoes do job.
+ * O link e colado a mao: a UazAPI desta build ainda nao tem endpoint de
+ * invite-link confirmado, e colar funciona hoje sem depender disso.
+ */
+function InviteFields({
+  enabled, link, message, onToggle, onLink, onMessage,
+}: {
+  enabled: boolean; link: string; message: string;
+  onToggle: () => void; onLink: (v: string) => void; onMessage: (v: string) => void;
+}) {
+  const missingPlaceholder = !message.includes('{link}');
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={onToggle}
+        className="w-full flex items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2.5 text-left">
+        <div>
+          <p className="text-sm text-text-primary">Enviar convite por DM se a adição falhar</p>
+          <p className="text-xs text-text-secondary">Fallback automático quando a privacidade do contato bloqueia a adição</p>
+        </div>
+        <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${enabled ? 'bg-primary' : 'bg-zinc-700'}`}>
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        </span>
+      </button>
+
+      {enabled && (
+        <div className="space-y-2 rounded-lg border border-border bg-background/40 p-3">
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center gap-1.5"><Link2 className="h-3 w-3" />Link de convite do grupo</Label>
+            <Input value={link} onChange={(e) => onLink(e.target.value)}
+              placeholder="https://chat.whatsapp.com/..." className="text-sm" />
+            <p className="text-xs text-text-secondary">WhatsApp → grupo → Convidar via link → Copiar link</p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Mensagem do convite</Label>
+            <Textarea value={message} onChange={(e) => onMessage(e.target.value)} rows={3} className="text-sm" />
+            <p className={`text-xs ${missingPlaceholder ? 'text-danger' : 'text-text-secondary'}`}>
+              {missingPlaceholder ? 'A mensagem precisa conter {link}' : '{link} é trocado pelo link do grupo no envio'}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
