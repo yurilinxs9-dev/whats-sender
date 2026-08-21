@@ -75,7 +75,14 @@ describe('SpinService', () => {
         nome: 'Ana',
       });
       expect(result.length).toBeGreaterThan(0);
-      expect(result).toContain('Ana');
+      // O fingerprint espalha caracteres de largura zero em posicoes aleatorias
+      // e as vezes um deles cai no meio do nome. Sao invisiveis para quem le, entao
+      // a assercao os descarta: o que importa e a variavel ter sido substituida.
+      const zeroWidth = [0x200b, 0x200c, 0x200d, 0xfeff];
+      const visible = Array.from(result)
+        .filter((ch) => !zeroWidth.includes(ch.codePointAt(0) as number))
+        .join('');
+      expect(visible).toContain('Ana');
     });
   });
 });
