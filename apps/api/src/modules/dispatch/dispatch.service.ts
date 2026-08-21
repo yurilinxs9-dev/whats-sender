@@ -88,8 +88,7 @@ export class DispatchService {
     const activeInstances = campaign.instances
       .filter(
         (ci) =>
-          ci.instance.status === 'connected' &&
-          ci.instance.health_score > 20,
+          ci.instance.status === 'connected' && ci.instance.health_score > 20,
       )
       .map((ci) => ci.instance);
 
@@ -106,9 +105,10 @@ export class DispatchService {
     const blacklistedSet = new Set(blacklist.map((b) => b.telefone));
 
     const freqCapDays = settings?.frequency_cap_days ?? 0;
-    const freqCapDate = freqCapDays > 0
-      ? new Date(Date.now() - freqCapDays * 24 * 60 * 60 * 1000)
-      : null;
+    const freqCapDate =
+      freqCapDays > 0
+        ? new Date(Date.now() - freqCapDays * 24 * 60 * 60 * 1000)
+        : null;
 
     let dispatched = 0;
     let skipped = 0;
@@ -118,7 +118,9 @@ export class DispatchService {
       // Validate phone format — must be 12-13 digits starting with 55
       const phone = contact.telefone.replace(/\D/g, '');
       if (phone.length < 12 || phone.length > 13 || !phone.startsWith('55')) {
-        this.logger.warn(`Skipped ${contact.telefone}: invalid phone format (${phone.length} digits)`);
+        this.logger.warn(
+          `Skipped ${contact.telefone}: invalid phone format (${phone.length} digits)`,
+        );
         skipped++;
         continue;
       }
@@ -138,8 +140,14 @@ export class DispatchService {
       }
 
       // Skip frequency cap (contacted within X days)
-      if (freqCapDate && contact.last_contacted && contact.last_contacted > freqCapDate) {
-        this.logger.warn(`Skipped ${contact.telefone}: frequency cap (${freqCapDays}d)`);
+      if (
+        freqCapDate &&
+        contact.last_contacted &&
+        contact.last_contacted > freqCapDate
+      ) {
+        this.logger.warn(
+          `Skipped ${contact.telefone}: frequency cap (${freqCapDays}d)`,
+        );
         skipped++;
         continue;
       }
@@ -217,10 +225,7 @@ export class DispatchService {
   /**
    * Pause a running campaign.
    */
-  async pauseCampaign(
-    campaignId: string,
-    tenantId: string,
-  ): Promise<void> {
+  async pauseCampaign(campaignId: string, tenantId: string): Promise<void> {
     const campaign = await this.prisma.campaign.findFirst({
       where: { id: campaignId, tenant_id: tenantId },
     });
@@ -279,8 +284,7 @@ export class DispatchService {
     const activeInstances = campaign.instances
       .filter(
         (ci) =>
-          ci.instance.status === 'connected' &&
-          ci.instance.health_score > 20,
+          ci.instance.status === 'connected' && ci.instance.health_score > 20,
       )
       .map((ci) => ci.instance);
 
@@ -408,7 +412,9 @@ export class DispatchService {
           this.prisma.campaign.findUnique({ where: { id: campaignId } }),
           this.prisma.contact.findUnique({ where: { id: contactId } }),
           this.prisma.instance.findUnique({ where: { id: instanceId } }),
-          templateId ? this.prisma.template.findUnique({ where: { id: templateId } }) : Promise.resolve(null),
+          templateId
+            ? this.prisma.template.findUnique({ where: { id: templateId } })
+            : Promise.resolve(null),
           this.prisma.tenantSettings.findUnique({
             where: { tenant_id: tenantId },
           }),
@@ -423,9 +429,12 @@ export class DispatchService {
       }
 
       // Get message content from template or inline
-      const messageContent_raw = template?.content ?? campaign.inline_message ?? '';
+      const messageContent_raw =
+        template?.content ?? campaign.inline_message ?? '';
       if (!messageContent_raw) {
-        this.logger.warn(`Dispatch ${dispatchId}: no message content, marking FAILED`);
+        this.logger.warn(
+          `Dispatch ${dispatchId}: no message content, marking FAILED`,
+        );
         await this.markDispatch(dispatchId, 'FAILED');
         return;
       }
@@ -495,7 +504,7 @@ export class DispatchService {
             (template?.type ?? 'TEXT') === 'AUDIO' ? 'recording' : 'composing';
           await this.uazApi.setPresence(token, contact.telefone, presence);
           await this.delay(typingTime + jitter);
-        } catch (presenceError) {
+        } catch {
           this.logger.warn(
             `Dispatch ${dispatchId}: presence simulation failed, continuing`,
           );
@@ -512,17 +521,13 @@ export class DispatchService {
       if (campaign.use_spin && template?.has_spin) {
         messageContent = this.spin.processMessage(messageContent, variables);
       } else {
-        messageContent = this.spin.resolveVariables(
-          messageContent,
-          variables,
-        );
+        messageContent = this.spin.resolveVariables(messageContent, variables);
         messageContent = this.spin.addZeroWidthFingerprint(messageContent);
       }
 
       // Add opt-out if template has it
       if (template?.has_optout) {
-        messageContent +=
-          '\n\nResponda SAIR para nao receber mais mensagens.';
+        messageContent += '\n\nResponda SAIR para nao receber mais mensagens.';
       }
 
       // Send based on type
@@ -653,8 +658,7 @@ export class DispatchService {
         );
       }
     } catch (error) {
-      const errorMsg =
-        error instanceof Error ? error.message : 'unknown error';
+      const errorMsg = error instanceof Error ? error.message : 'unknown error';
       this.logger.error(`Dispatch ${dispatchId} failed: ${errorMsg}`);
 
       try {
@@ -722,8 +726,7 @@ export class DispatchService {
    */
   private selectInstance(instances: SelectableInstance[]): SelectableInstance {
     const weights = instances.map((inst) => {
-      const capacityRatio =
-        1 - inst.daily_sent / Math.max(inst.daily_limit, 1);
+      const capacityRatio = 1 - inst.daily_sent / Math.max(inst.daily_limit, 1);
       return {
         instance: inst,
         weight: inst.health_score * Math.max(capacityRatio, 0),
