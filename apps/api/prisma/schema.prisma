@@ -499,6 +499,13 @@ model GroupAddJob {
   added_today         Int             @default(0)
   last_reset_at       DateTime        @default(now())
   status              AddJobStatus    @default(IDLE)
+  // Por que o job parou de adicionar. Null = rodando ou nunca rodou.
+  stop_reason         AddJobStopReason?
+  // Quando volta sozinho (cap diario / janela de envio). Null = so manualmente.
+  resume_at           DateTime?
+  // Quantos alvos ainda faltam processar da rodada atual: zera quando a rodada
+  // acaba, e e o que distingue "acabou o lote" de "ainda esta rodando".
+  run_remaining       Int             @default(0)
   last_run_at         DateTime?
   created_at          DateTime        @default(now())
   updated_at          DateTime        @updatedAt
@@ -507,6 +514,16 @@ model GroupAddJob {
 
   @@index([tenant_id])
   @@index([status])
+}
+
+// Motivo da parada — cada um pede uma acao diferente de quem opera.
+enum AddJobStopReason {
+  // Acabou o limite por rodada. Retoma no proximo "Rodar lote".
+  ROUND_DONE
+  // Bateu o teto diario. Retoma sozinho depois da meia-noite.
+  DAILY_CAP
+  // Fora da janela de envio. Retoma sozinho quando a janela abrir.
+  OUTSIDE_WINDOW
 }
 
 enum AddJobStatus {

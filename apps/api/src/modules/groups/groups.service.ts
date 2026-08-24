@@ -327,9 +327,16 @@ export class GroupsService {
     if (pending.length === 0)
       throw new BadRequestException('Nenhum alvo pendente para adicionar');
 
+    // `run_remaining` e o tamanho declarado da rodada: o worker decrementa a
+    // cada alvo e, ao zerar com pendentes sobrando, marca ROUND_DONE.
     await this.prisma.groupAddJob.update({
       where: { id },
-      data: { status: 'RUNNING' },
+      data: {
+        status: 'RUNNING',
+        run_remaining: pending.length,
+        stop_reason: null,
+        resume_at: null,
+      },
     });
 
     // Espaça as adições: delay cumulativo com jitter entre delay_min_s e delay_max_s

@@ -94,9 +94,12 @@ interface AddJob {
   invited_count: number;
   added_count: number;
   failed_count: number;
+  not_joined_count: number;
   skipped_count: number;
   added_today: number;
   status: string;
+  stop_reason?: 'ROUND_DONE' | 'DAILY_CAP' | 'OUTSIDE_WINDOW' | null;
+  resume_at?: string | null;
   created_at: string;
   dest_instance: { nome: string; status: string };
   extraction: { nome: string; source_group_name: string };
@@ -153,6 +156,43 @@ const TARGET_STATUS: Record<string, { label: string; cls: string }> = {
   SKIPPED: { label: 'Pulado', cls: 'text-zinc-500' },
   INVITED: { label: 'Convidado', cls: 'text-blue-400' },
 };
+
+/**
+ * O que o job esta esperando, em portugues de operador: o que aconteceu e
+ * qual e o proximo passo — clicar ou so aguardar.
+ */
+function stopReasonText(
+  reason: string | null | undefined,
+  resumeAt: string | null | undefined,
+): { title: string; hint: string } | null {
+  if (!reason) return null;
+  const hora = resumeAt
+    ? new Date(resumeAt).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+  if (reason === 'ROUND_DONE')
+    return {
+      title: 'Rodada concluída',
+      hint: 'Clique em "Rodar lote" para adicionar o próximo lote.',
+    };
+  if (reason === 'DAILY_CAP')
+    return {
+      title: 'Cap diário atingido',
+      hint: hora
+        ? `Retoma sozinho a partir das ${hora}. Não precisa clicar.`
+        : 'Retoma sozinho depois da meia-noite. Não precisa clicar.',
+    };
+  if (reason === 'OUTSIDE_WINDOW')
+    return {
+      title: 'Fora da janela de envio',
+      hint: hora
+        ? `Retoma sozinho às ${hora}. Não precisa clicar.`
+        : 'Retoma sozinho quando a janela abrir.',
+    };
+  return null;
+}
 
 function Badge({
   map,
@@ -898,6 +938,20 @@ function AddJobsTab() {
                         </div>
                         <ProgressBar value={done} max={total} />
                       </div>
+                      {(() => {
+                        const stop = stopReasonText(j.stop_reason, j.resume_at);
+                        if (!stop) return null;
+                        return (
+                          <div className="mt-3 rounded-lg border border-border bg-background/40 px-3 py-2">
+                            <p className="text-xs font-medium text-text-primary">
+                              {stop.title}
+                            </p>
+                            <p className="text-xs text-text-secondary">
+                              {stop.hint}
+                            </p>
+                          </div>
+                        );
+                      })()}
                       <div className="mt-2 flex gap-4 text-xs text-text-secondary">
                         <span>Lote: {j.per_run_limit}</span>
                         <span>
@@ -942,22 +996,23 @@ function AddJobsTab() {
                           Rodar lote
                         </Button>
                       )}
-                      {j.failed_count > 0 && j.status !== 'RUNNING' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => retryFailed(j.id)}
-                          disabled={busy === j.id + ':retry'}
-                          className="gap-1.5"
-                        >
-                          {busy === j.id + ':retry' ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3 w-3" />
-                          )}
-                          Re-tentar falhas
-                        </Button>
-                      )}
+                      {j.failed_count + (j.not_joined_count ?? 0) > 0 &&
+                        j.status !== 'RUNNING' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => retryFailed(j.id)}
+                            disabled={busy === j.id + ':retry'}
+                            className="gap-1.5"
+                          >
+                            {busy === j.id + ':retry' ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3" />
+                            )}
+                            Re-tentar falhas
+                          </Button>
+                        )}
                       {canPause && (
                         <Button
                           size="sm"
