@@ -657,7 +657,7 @@ function ExtractionsTab() {
 
       {/* Dialog relatório extração */}
       <Dialog open={!!report} onOpenChange={(o) => !o && setReport(null)}>
-        <DialogContent className="sm:max-w-2xl bg-surface border-border">
+        <DialogContent className="sm:max-w-3xl bg-surface border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Relatório — {report?.nome}</DialogTitle>
           </DialogHeader>
@@ -1397,7 +1397,7 @@ function AddJobReport({
   }
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         <Stat
           icon={<CheckCircle2 className="h-4 w-4 text-green-400" />}
           label="Adicionados"
@@ -1510,7 +1510,7 @@ function AddJobReport({
         {targets.map((t) => (
           <div
             key={t.id}
-            className="flex items-center justify-between px-3 py-1.5 text-xs gap-2"
+            className="flex items-center justify-between px-3 py-1.5 text-xs gap-2 min-w-0"
           >
             <span className="text-text-primary shrink-0">
               {t.phone || t.member_jid}
@@ -1778,12 +1778,13 @@ function Stat({
     <>
       <div className="flex items-center gap-1.5">
         {icon}
-        <span className="text-xs text-text-secondary">{label}</span>
+        <span className="text-xs text-text-secondary truncate">{label}</span>
       </div>
       <span className="text-lg font-bold text-text-primary">{value}</span>
     </>
   );
-  const base = 'rounded-lg border p-3 flex flex-col gap-1 text-left';
+  const base =
+    'rounded-lg border p-3 flex flex-col gap-1 text-left min-w-0 overflow-hidden';
   if (!onClick) {
     return <div className={`${base} border-border`}>{content}</div>;
   }
