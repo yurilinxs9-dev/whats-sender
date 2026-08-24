@@ -371,11 +371,38 @@ export class GroupsService {
   }
 
   async updateAddJob(tenantId: string, id: string, dto: UpdateAddJobDto) {
-    await this.assertAddJob(tenantId, id);
+    const job = await this.assertAddJob(tenantId, id);
+
+    // Trocar a instancia com o job em execucao deixaria alvos ja enfileirados
+    // saindo pelo numero antigo — o relatorio diria uma coisa e o WhatsApp
+    // outra.
+    if (dto.dest_instance_id && dto.dest_instance_id !== job.dest_instance_id) {
+      if (job.status === 'RUNNING')
+        throw new BadRequestException(
+          'Pause o job antes de trocar a instância',
+        );
+      const instance = await this.prisma.instance.findFirst({
+        where: { id: dto.dest_instance_id, tenant_id: tenantId },
+      });
+      if (!instance)
+        throw new NotFoundException('Instância destino não encontrada');
+      if (instance.status !== 'connected')
+        throw new BadRequestException(
+          'Instância destino precisa estar conectada',
+        );
+      if (!this.extractToken(instance.config))
+        throw new BadRequestException(
+          'Instância destino sem token UazAPI. Reconecte.',
+        );
+    }
+
     await this.prisma.groupAddJob.update({
       where: { id },
       data: {
         ...(dto.nome !== undefined && { nome: dto.nome }),
+        ...(dto.dest_instance_id !== undefined && {
+          dest_instance_id: dto.dest_instance_id,
+        }),
         ...(dto.per_run_limit !== undefined && {
           per_run_limit: dto.per_run_limit,
         }),
