@@ -87,7 +87,15 @@ export type SendInviteDto = z.infer<typeof SendInviteSchema>;
 // jobs reais tem centenas de alvos e a tela faz polling.
 export const ListAddTargetsSchema = z.object({
   status: z
-    .enum(['PENDING', 'PROCESSING', 'DONE', 'FAILED', 'SKIPPED', 'INVITED'])
+    .enum([
+      'PENDING',
+      'PROCESSING',
+      'DONE',
+      'FAILED',
+      'NOT_JOINED',
+      'SKIPPED',
+      'INVITED',
+    ])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(200).default(50),

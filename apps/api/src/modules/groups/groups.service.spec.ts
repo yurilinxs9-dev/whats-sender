@@ -141,6 +141,21 @@ describe('GroupsService', () => {
       expect(args.where.status).toBe('FAILED');
     });
 
+    it('aceita filtrar por quem não entrou no grupo', async () => {
+      const prisma = makePrisma();
+
+      await makeService(prisma).listAddTargets('t1', 'job-1', {
+        page: 1,
+        page_size: 50,
+        status: 'NOT_JOINED',
+      });
+
+      const args = prisma.addTarget.findMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+      };
+      expect(args.where.status).toBe('NOT_JOINED');
+    });
+
     it('falha quando o job não é do tenant', async () => {
       const prisma = makePrisma();
       prisma.groupAddJob.findFirst.mockResolvedValue(null);
