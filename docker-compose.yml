@@ -2,15 +2,18 @@ version: '3.8'
 
 services:
   sender-db:
-    image: postgres:16-alpine
+    # Mesma major do banco de origem: pg_dump recusa servidor mais novo.
+    image: postgres:17-alpine
     container_name: sender-db
     restart: unless-stopped
     ports:
-      - '5433:5432'
+      # Apenas loopback: o backend fala pela rede interna do compose, e nada
+      # fora da maquina precisa alcancar o banco.
+      - '127.0.0.1:5433:5432'
     environment:
-      POSTGRES_USER: sender
-      POSTGRES_PASSWORD: sender123
-      POSTGRES_DB: whatsapp_sender
+      POSTGRES_USER: ${SENDER_DB_USER:-sender}
+      POSTGRES_PASSWORD: ${SENDER_DB_PASSWORD:?defina SENDER_DB_PASSWORD no .env}
+      POSTGRES_DB: ${SENDER_DB_NAME:-whatsapp_sender}
     volumes:
       - sender-pgdata:/var/lib/postgresql/data
     networks:
