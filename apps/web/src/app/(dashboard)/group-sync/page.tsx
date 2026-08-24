@@ -954,7 +954,9 @@ function AddJobsTab() {
                         );
                       })()}
                       <div className="mt-2 flex gap-4 text-xs text-text-secondary">
-                        <span>Lote: {j.per_run_limit}</span>
+                        <span title="Quantos são adicionados a cada clique em Rodar lote">
+                          {j.per_run_limit} por rodada
+                        </span>
                         <span>
                           Cap diário: {j.daily_add_cap} (hoje {j.added_today})
                         </span>
@@ -1152,6 +1154,9 @@ function AddJobsTab() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Limite por rodada</Label>
+                <p className="text-[11px] leading-snug text-text-secondary">
+                  Quantos são adicionados a cada clique em "Rodar lote".
+                </p>
                 <Input
                   type="number"
                   min={1}
@@ -1164,6 +1169,9 @@ function AddJobsTab() {
               </div>
               <div className="space-y-1.5">
                 <Label>Cap diário</Label>
+                <p className="text-[11px] leading-snug text-text-secondary">
+                  Teto por dia. Ao bater, o job só volta depois da meia-noite.
+                </p>
                 <Input
                   type="number"
                   min={1}
@@ -1176,6 +1184,9 @@ function AddJobsTab() {
               </div>
               <div className="space-y-1.5">
                 <Label>Delay mín (s)</Label>
+                <p className="text-[11px] leading-snug text-text-secondary">
+                  Espera mínima entre uma adição e a próxima.
+                </p>
                 <Input
                   type="number"
                   min={5}
@@ -1188,6 +1199,9 @@ function AddJobsTab() {
               </div>
               <div className="space-y-1.5">
                 <Label>Delay máx (s)</Label>
+                <p className="text-[11px] leading-snug text-text-secondary">
+                  Espera máxima. O intervalo real sorteia entre mín e máx.
+                </p>
                 <Input
                   type="number"
                   min={5}
@@ -1636,6 +1650,9 @@ function AddJobSettings({
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">Limite por rodada</Label>
+              <p className="text-[11px] leading-snug text-text-secondary">
+                Quantos são adicionados a cada clique em "Rodar lote".
+              </p>
               <Input
                 value={perRun}
                 onChange={(e) => setPerRun(e.target.value)}
@@ -1643,14 +1660,23 @@ function AddJobSettings({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Cap diário</Label>
+              <p className="text-[11px] leading-snug text-text-secondary">
+                Teto por dia. Ao bater, o job só volta depois da meia-noite.
+              </p>
               <Input value={cap} onChange={(e) => setCap(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Delay mín (s)</Label>
+              <p className="text-[11px] leading-snug text-text-secondary">
+                Espera mínima entre uma adição e a próxima.
+              </p>
               <Input value={dMin} onChange={(e) => setDMin(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Delay máx (s)</Label>
+              <p className="text-[11px] leading-snug text-text-secondary">
+                Espera máxima. O intervalo real sorteia entre mín e máx.
+              </p>
               <Input value={dMax} onChange={(e) => setDMax(e.target.value)} />
             </div>
           </div>
