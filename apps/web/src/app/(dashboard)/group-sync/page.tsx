@@ -14,6 +14,7 @@ import {
   FileBarChart,
   CheckCircle2,
   XCircle,
+  UserX,
   Clock,
   Send,
   Settings2,
@@ -1281,6 +1282,7 @@ function AddJobReport({
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<string>('');
   const counts = job.counts ?? {};
   // "Nao entrou" e falha de envio caem no mesmo balde para efeito de convite:
   // os dois significam alguem que ficou de fora do grupo.
@@ -1295,7 +1297,13 @@ function AddJobReport({
       try {
         const { data } = await api.get<TargetPage>(
           `/groups/add-jobs/${job.id}/targets`,
-          { params: { page: p, page_size: PAGE_SIZE } },
+          {
+            params: {
+              page: p,
+              page_size: PAGE_SIZE,
+              ...(filter && { status: filter }),
+            },
+          },
         );
         setTargets((prev) => (p === 1 ? data.items : [...prev, ...data.items]));
         setTotal(data.total);
@@ -1306,9 +1314,11 @@ function AddJobReport({
         setLoading(false);
       }
     },
-    [job.id],
+    [job.id, filter],
   );
 
+  // Trocar de filtro recomeca a paginacao: manter a pagina antiga mostraria
+  // um pedaco do meio de outra lista.
   useEffect(() => {
     void loadPage(1);
   }, [loadPage]);
@@ -1345,7 +1355,13 @@ function AddJobReport({
       for (;;) {
         const { data } = await api.get<TargetPage>(
           `/groups/add-jobs/${job.id}/targets`,
-          { params: { page: p, page_size: CSV_PAGE_SIZE } },
+          {
+            params: {
+              page: p,
+              page_size: CSV_PAGE_SIZE,
+              ...(filter && { status: filter }),
+            },
+          },
         );
         all.push(...data.items);
         if (all.length >= data.total || data.items.length === 0) break;
@@ -1369,7 +1385,10 @@ function AddJobReport({
           t.invited_at ?? '',
         ]),
       ];
-      downloadCsv(rows, `adicao-${job.nome}.csv`);
+      downloadCsv(
+        rows,
+        `adicao-${job.nome}${filter ? `-${filter.toLowerCase()}` : ''}.csv`,
+      );
     } catch (e) {
       toast.error(errMsg(e, 'Erro ao exportar'));
     } finally {
@@ -1378,28 +1397,58 @@ function AddJobReport({
   }
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         <Stat
           icon={<CheckCircle2 className="h-4 w-4 text-green-400" />}
           label="Adicionados"
           value={counts.DONE ?? 0}
+          active={filter === 'DONE'}
+          onClick={() => setFilter(filter === 'DONE' ? '' : 'DONE')}
+        />
+        <Stat
+          icon={<UserX className="h-4 w-4 text-amber-400" />}
+          label="Não entraram"
+          value={counts.NOT_JOINED ?? 0}
+          active={filter === 'NOT_JOINED'}
+          onClick={() => setFilter(filter === 'NOT_JOINED' ? '' : 'NOT_JOINED')}
         />
         <Stat
           icon={<Send className="h-4 w-4 text-blue-400" />}
           label="Convidados"
           value={counts.INVITED ?? 0}
+          active={filter === 'INVITED'}
+          onClick={() => setFilter(filter === 'INVITED' ? '' : 'INVITED')}
         />
         <Stat
           icon={<XCircle className="h-4 w-4 text-danger" />}
           label="Falhas"
           value={counts.FAILED ?? 0}
+          active={filter === 'FAILED'}
+          onClick={() => setFilter(filter === 'FAILED' ? '' : 'FAILED')}
         />
         <Stat
           icon={<Clock className="h-4 w-4 text-zinc-400" />}
           label="Pendentes"
           value={(counts.PENDING ?? 0) + (counts.PROCESSING ?? 0)}
+          active={filter === 'PENDING'}
+          onClick={() => setFilter(filter === 'PENDING' ? '' : 'PENDING')}
         />
       </div>
+      {filter && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-text-secondary">
+            Filtrando por {TARGET_STATUS[filter]?.label ?? filter} — {total}{' '}
+            {total === 1 ? 'alvo' : 'alvos'}
+          </span>
+          <button
+            type="button"
+            className="text-primary hover:underline"
+            onClick={() => setFilter('')}
+          >
+            limpar filtro
+          </button>
+        </div>
+      )}
       {reasons.length > 0 && (
         <div className="rounded-lg border border-border p-3">
           <p className="text-xs font-medium text-text-primary mb-2">
@@ -1716,19 +1765,41 @@ function Stat({
   icon,
   label,
   value,
+  active,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  active?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="rounded-lg border border-border p-3 flex flex-col gap-1">
+  const content = (
+    <>
       <div className="flex items-center gap-1.5">
         {icon}
         <span className="text-xs text-text-secondary">{label}</span>
       </div>
       <span className="text-lg font-bold text-text-primary">{value}</span>
-    </div>
+    </>
+  );
+  const base = 'rounded-lg border p-3 flex flex-col gap-1 text-left';
+  if (!onClick) {
+    return <div className={`${base} border-border`}>{content}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`${base} transition-colors ${
+        active
+          ? 'border-primary bg-primary/10'
+          : 'border-border hover:border-zinc-600'
+      }`}
+    >
+      {content}
+    </button>
   );
 }
 
