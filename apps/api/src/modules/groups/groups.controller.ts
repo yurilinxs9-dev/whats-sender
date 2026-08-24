@@ -1,4 +1,5 @@
 import {
+  Query,
   Controller,
   Get,
   Post,
@@ -17,6 +18,7 @@ import {
   CreateAddJobSchema,
   UpdateAddJobSchema,
   SendInviteSchema,
+  ListAddTargetsSchema,
   RunAddJobSchema,
 } from './dto/group.dto';
 import type { AuthUser } from '../../common/types/auth-user';
@@ -82,6 +84,21 @@ export class GroupsController {
   @Get('add-jobs/:id')
   getAddJob(@Req() req: Req, @Param('id') id: string) {
     return this.groupsService.getAddJob(req.user.tenantId, id);
+  }
+
+  @Get('add-jobs/:id/targets')
+  listAddTargets(
+    @Req() req: Req,
+    @Param('id') id: string,
+    @Query() query: unknown,
+  ) {
+    const parsed = ListAddTargetsSchema.safeParse(query ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.groupsService.listAddTargets(
+      req.user.tenantId,
+      id,
+      parsed.data,
+    );
   }
 
   @Post('add-jobs/:id/run')

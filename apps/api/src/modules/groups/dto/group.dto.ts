@@ -82,3 +82,14 @@ export const SendInviteSchema = z.object({
   target_ids: z.array(z.string().uuid()).min(1).max(500).optional(),
 });
 export type SendInviteDto = z.infer<typeof SendInviteSchema>;
+
+// Paginacao dos alvos de um job. O detalhe do job nao traz mais a lista:
+// jobs reais tem centenas de alvos e a tela faz polling.
+export const ListAddTargetsSchema = z.object({
+  status: z
+    .enum(['PENDING', 'PROCESSING', 'DONE', 'FAILED', 'SKIPPED', 'INVITED'])
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type ListAddTargetsDto = z.infer<typeof ListAddTargetsSchema>;
