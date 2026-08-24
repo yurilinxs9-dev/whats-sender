@@ -15,6 +15,7 @@ import {
   CreateAddJobDto,
   UpdateAddJobDto,
   SendInviteDto,
+  ListAddTargetsDto,
 } from './dto/group.dto';
 import type { GroupAddJobData } from '../queues/workers/group-add.worker';
 
@@ -225,17 +226,79 @@ export class GroupsService {
     });
   }
 
+  /**
+   * Detalhe do job SEM a lista de alvos: um job real tem centenas deles e esta
+   * rota e refeita a cada ciclo de polling. O que a tela precisa e agregado —
+   * contagem por status e motivos de falha — e sai do banco, nao da memoria.
+   * Os alvos em si vem paginados por `listAddTargets`.
+   */
   async getAddJob(tenantId: string, id: string) {
     const job = await this.prisma.groupAddJob.findFirst({
       where: { id, tenant_id: tenantId },
       include: {
         dest_instance: { select: { nome: true, status: true } },
         extraction: { select: { nome: true, source_group_name: true } },
-        targets: { orderBy: { created_at: 'asc' } },
       },
     });
     if (!job) throw new NotFoundException('Job de adição não encontrado');
-    return job;
+
+    const [byStatus, byReason] = await Promise.all([
+      this.prisma.addTarget.groupBy({
+        by: ['status'],
+        where: { job_id: id },
+        _count: { _all: true },
+      }),
+      this.prisma.addTarget.groupBy({
+        by: ['error'],
+        where: { job_id: id, status: 'FAILED' },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const counts: Record<string, number> = {};
+    for (const row of byStatus) counts[row.status] = row._count._all;
+
+    const failure_reasons = byReason
+      .map((row) => ({
+        reason: row.error ?? 'desconhecido',
+        count: row._count._all,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { ...job, counts, failure_reasons };
+  }
+
+  /**
+   * Uma pagina de alvos do job, opcionalmente filtrada por status.
+   */
+  async listAddTargets(
+    tenantId: string,
+    id: string,
+    query: ListAddTargetsDto,
+  ): Promise<{
+    items: unknown[];
+    total: number;
+    page: number;
+    page_size: number;
+  }> {
+    await this.assertAddJob(tenantId, id);
+
+    const where = {
+      job_id: id,
+      ...(query.status && { status: query.status }),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.addTarget.findMany({
+        where,
+        orderBy: { created_at: 'asc' },
+        skip: (query.page - 1) * query.page_size,
+        take: query.page_size,
+      }),
+      this.prisma.addTarget.count({ where }),
+    ]);
+
+    return { items, total, page: query.page, page_size: query.page_size };
   }
 
   async runAddJob(tenantId: string, id: string, limitOverride?: number) {

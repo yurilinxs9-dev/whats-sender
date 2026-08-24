@@ -113,7 +113,14 @@ interface AddTarget {
   invited_at?: string | null;
 }
 interface AddJobDetail extends AddJob {
-  targets: AddTarget[];
+  counts: Record<string, number>;
+  failure_reasons: { reason: string; count: number }[];
+}
+interface TargetPage {
+  items: AddTarget[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 // ─── Status config ───────────────────────────────────
@@ -132,6 +139,10 @@ const JOB_STATUS: Record<string, { label: string; cls: string }> = {
 };
 const DEFAULT_INVITE_MSG =
   'Oi! Nao consegui te adicionar direto no grupo (sua privacidade do WhatsApp bloqueia). Entra por aqui: {link}';
+
+// Tamanho da pagina da lista de alvos no relatorio e da varredura do CSV.
+const PAGE_SIZE = 50;
+const CSV_PAGE_SIZE = 200;
 
 const TARGET_STATUS: Record<string, { label: string; cls: string }> = {
   PENDING: { label: 'Pendente', cls: 'text-zinc-400' },
@@ -1210,12 +1221,39 @@ function AddJobReport({
   onChanged: () => void;
 }) {
   const [sending, setSending] = useState<string | null>(null);
-  const counts = job.targets.reduce<Record<string, number>>((acc, t) => {
-    acc[t.status] = (acc[t.status] ?? 0) + 1;
-    return acc;
-  }, {});
-  const failed = job.targets.filter((t) => t.status === 'FAILED');
+  const [targets, setTargets] = useState<AddTarget[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const counts = job.counts ?? {};
+  const failedCount = counts.FAILED ?? 0;
   const canInvite = !!job.invite_link;
+
+  // A lista vem paginada: um job real tem centenas de alvos e antes o detalhe
+  // do job carregava todos eles a cada ciclo de polling.
+  const loadPage = useCallback(
+    async (p: number) => {
+      setLoading(true);
+      try {
+        const { data } = await api.get<TargetPage>(
+          `/groups/add-jobs/${job.id}/targets`,
+          { params: { page: p, page_size: PAGE_SIZE } },
+        );
+        setTargets((prev) => (p === 1 ? data.items : [...prev, ...data.items]));
+        setTotal(data.total);
+        setPage(p);
+      } catch (e) {
+        toast.error(errMsg(e, 'Erro ao carregar alvos'));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [job.id],
+  );
+
+  useEffect(() => {
+    void loadPage(1);
+  }, [loadPage]);
 
   async function invite(targetIds?: string[]) {
     if (!canInvite) {
@@ -1236,32 +1274,49 @@ function AddJobReport({
       setSending(null);
     }
   }
-  // motivos agrupados
-  const reasons = failed.reduce<Record<string, number>>((acc, t) => {
-    const r = t.error ?? 'desconhecido';
-    acc[r] = (acc[r] ?? 0) + 1;
-    return acc;
-  }, {});
-  function exportCsv() {
-    const rows = [
-      [
-        'phone',
-        'status',
-        'tentativas',
-        'erro',
-        'adicionado_em',
-        'convidado_em',
-      ],
-      ...job.targets.map((t) => [
-        t.phone,
-        t.status,
-        String(t.attempts),
-        t.error ?? '',
-        t.added_at ?? '',
-        t.invited_at ?? '',
-      ]),
-    ];
-    downloadCsv(rows, `adicao-${job.nome}.csv`);
+  // Motivos ja vem agregados do servidor — nao dependem da pagina carregada.
+  const reasons = job.failure_reasons ?? [];
+
+  // O CSV precisa de TODOS os alvos, nao so da pagina na tela: percorre as
+  // paginas ate o fim antes de montar o arquivo.
+  async function exportCsv() {
+    setLoading(true);
+    try {
+      const all: AddTarget[] = [];
+      let p = 1;
+      for (;;) {
+        const { data } = await api.get<TargetPage>(
+          `/groups/add-jobs/${job.id}/targets`,
+          { params: { page: p, page_size: CSV_PAGE_SIZE } },
+        );
+        all.push(...data.items);
+        if (all.length >= data.total || data.items.length === 0) break;
+        p += 1;
+      }
+      const rows = [
+        [
+          'phone',
+          'status',
+          'tentativas',
+          'erro',
+          'adicionado_em',
+          'convidado_em',
+        ],
+        ...all.map((t) => [
+          t.phone,
+          t.status,
+          String(t.attempts),
+          t.error ?? '',
+          t.added_at ?? '',
+          t.invited_at ?? '',
+        ]),
+      ];
+      downloadCsv(rows, `adicao-${job.nome}.csv`);
+    } catch (e) {
+      toast.error(errMsg(e, 'Erro ao exportar'));
+    } finally {
+      setLoading(false);
+    }
   }
   return (
     <div className="space-y-3">
@@ -1287,26 +1342,28 @@ function AddJobReport({
           value={(counts.PENDING ?? 0) + (counts.PROCESSING ?? 0)}
         />
       </div>
-      {Object.keys(reasons).length > 0 && (
+      {reasons.length > 0 && (
         <div className="rounded-lg border border-border p-3">
           <p className="text-xs font-medium text-text-primary mb-2">
             Motivos de falha
           </p>
           <div className="space-y-1">
-            {Object.entries(reasons).map(([r, n]) => (
-              <div key={r} className="flex justify-between text-xs">
-                <span className="text-text-secondary truncate mr-2">{r}</span>
-                <span className="text-danger shrink-0">{n}</span>
+            {reasons.map((r) => (
+              <div key={r.reason} className="flex justify-between text-xs">
+                <span className="text-text-secondary truncate mr-2">
+                  {r.reason}
+                </span>
+                <span className="text-danger shrink-0">{r.count}</span>
               </div>
             ))}
           </div>
         </div>
       )}
-      {failed.length > 0 && (
+      {failedCount > 0 && (
         <div className="rounded-lg border border-border p-3 flex items-center gap-3">
           <div className="min-w-0">
             <p className="text-xs font-medium text-text-primary">
-              {failed.length} números não entraram
+              {failedCount} números não entraram
             </p>
             <p className="text-xs text-text-secondary">
               {canInvite
@@ -1335,14 +1392,15 @@ function AddJobReport({
           size="sm"
           variant="outline"
           className="gap-1.5"
-          onClick={exportCsv}
+          onClick={() => void exportCsv()}
+          disabled={loading}
         >
           <Download className="h-3 w-3" />
           Exportar CSV
         </Button>
       </div>
       <div className="max-h-72 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-        {job.targets.map((t) => (
+        {targets.map((t) => (
           <div
             key={t.id}
             className="flex items-center justify-between px-3 py-1.5 text-xs gap-2"
@@ -1381,7 +1439,31 @@ function AddJobReport({
             )}
           </div>
         ))}
+        {targets.length === 0 && !loading && (
+          <p className="px-3 py-4 text-xs text-text-secondary">
+            Nenhum alvo para mostrar.
+          </p>
+        )}
       </div>
+      {targets.length < total && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-text-secondary">
+            Mostrando {targets.length} de {total}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading}
+            onClick={() => void loadPage(page + 1)}
+          >
+            {loading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              'Carregar mais'
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
