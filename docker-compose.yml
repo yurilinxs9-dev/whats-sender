@@ -38,6 +38,11 @@ services:
       - sender-db
       - sender-redis
     environment:
+      # A janela de envio e o reset do cap diario sao calculados com a hora
+      # local do processo. Sem isto o container roda em UTC e a janela sai
+      # tres horas adiantada: o disparo comeca de madrugada e para no meio
+      # da tarde.
+      - TZ=${TZ:-America/Sao_Paulo}
       - DATABASE_URL=${DATABASE_URL}
       - DIRECT_URL=${DIRECT_URL}
       - JWT_SECRET=${JWT_SECRET}

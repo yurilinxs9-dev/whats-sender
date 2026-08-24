@@ -18,7 +18,7 @@ RUN npm run build
 # Stage 2: Production
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache openssl ffmpeg
+RUN apk add --no-cache openssl ffmpeg tzdata
 
 WORKDIR /app
 
