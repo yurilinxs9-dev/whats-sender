@@ -94,6 +94,12 @@ export class GroupAddWorker extends WorkerHost {
       );
       await this.markTarget(targetId, 'PENDING');
       const msUntilMidnight = this.msUntilHour(DAILY_RESET_HOUR + 1);
+      await this.markStopped(
+        jobId,
+        tenantId,
+        'DAILY_CAP',
+        new Date(Date.now() + msUntilMidnight),
+      );
       throw Object.assign(new Error('daily_cap_reached'), {
         delay: msUntilMidnight,
       });
@@ -112,6 +118,12 @@ export class GroupAddWorker extends WorkerHost {
       this.logger.log(`AddJob ${jobId} fora da janela de envio. Re-enfileira.`);
       await this.markTarget(targetId, 'PENDING');
       const msUntilWindow = this.msUntilWindowOpen(settings.send_window_start);
+      await this.markStopped(
+        jobId,
+        tenantId,
+        'OUTSIDE_WINDOW',
+        new Date(Date.now() + msUntilWindow),
+      );
       throw Object.assign(new Error('outside_send_window'), {
         delay: msUntilWindow,
       });
@@ -140,6 +152,13 @@ export class GroupAddWorker extends WorkerHost {
       where: { id: targetId },
       data: { status: 'PROCESSING', attempts: { increment: 1 } },
     });
+    // Voltou a andar: o motivo da parada anterior nao vale mais.
+    if (addJob.stop_reason) {
+      await this.prisma.groupAddJob.update({
+        where: { id: jobId },
+        data: { stop_reason: null, resume_at: null },
+      });
+    }
 
     try {
       const memberId = target.phone || target.member_jid;
@@ -327,10 +346,63 @@ export class GroupAddWorker extends WorkerHost {
     if (pending === 0) {
       await this.prisma.groupAddJob.update({
         where: { id: jobId },
-        data: { status: 'COMPLETED', last_run_at: new Date() },
+        data: {
+          status: 'COMPLETED',
+          last_run_at: new Date(),
+          stop_reason: null,
+          resume_at: null,
+          run_remaining: 0,
+        },
       });
       this.gateway.emitAddJobCompleted(jobId, tenantId);
+      return;
     }
+
+    // Sobrou alvo mas a rodada esgotou o lote: parou por decisao do operador,
+    // nao por bloqueio. Retomar e um clique em "Rodar lote" — e a tela precisa
+    // dizer isso, senao parece que o job travou.
+    const remaining = Math.max(0, (updated.run_remaining ?? 0) - 1);
+    await this.prisma.groupAddJob.update({
+      where: { id: jobId },
+      data: {
+        run_remaining: remaining,
+        ...(remaining === 0 && {
+          status: 'IDLE',
+          stop_reason: 'ROUND_DONE',
+          resume_at: null,
+          last_run_at: new Date(),
+        }),
+      },
+    });
+    if (remaining === 0) {
+      this.gateway.emitAddJobProgress(
+        jobId,
+        { status: 'IDLE', stop_reason: 'ROUND_DONE' },
+        tenantId,
+      );
+    }
+  }
+
+  /**
+   * Registra por que o job parou e quando volta sozinho. O status continua
+   * RUNNING nos casos automaticos: a fila ja tem o alvo reagendado, so quem
+   * olha a tela e que precisa saber o motivo da espera.
+   */
+  private async markStopped(
+    jobId: string,
+    tenantId: string,
+    reason: 'DAILY_CAP' | 'OUTSIDE_WINDOW',
+    resumeAt: Date,
+  ) {
+    await this.prisma.groupAddJob.update({
+      where: { id: jobId },
+      data: { stop_reason: reason, resume_at: resumeAt },
+    });
+    this.gateway.emitAddJobProgress(
+      jobId,
+      { stop_reason: reason, resume_at: resumeAt.toISOString() },
+      tenantId,
+    );
   }
 
   private async markTarget(id: string, status: string, error?: string) {
