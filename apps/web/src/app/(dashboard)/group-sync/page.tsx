@@ -1470,12 +1470,7 @@ function AddJobReport({
           </p>
           <div className="space-y-1">
             {reasons.map((r) => (
-              <div key={r.reason} className="flex justify-between text-xs">
-                <span className="text-text-secondary truncate mr-2">
-                  {r.reason}
-                </span>
-                <span className="text-danger shrink-0">{r.count}</span>
-              </div>
+              <FailureReason key={r.reason} reason={r.reason} count={r.count} />
             ))}
           </div>
         </div>
@@ -1782,6 +1777,39 @@ function InviteFields({
             </p>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Um motivo de falha e uma mensagem de erro tecnica, as vezes com o corpo cru
+ * da API dentro. Mostra so o resumo e guarda o resto atras de um clique: quem
+ * opera precisa da frase, quem depura precisa do texto inteiro.
+ */
+function FailureReason({ reason, count }: { reason: string; count: number }) {
+  const [open, setOpen] = useState(false);
+  const short = reason.split(' — ')[0].slice(0, 140);
+  const hasMore = short.length < reason.length;
+  return (
+    <div className="text-xs">
+      <div className="flex justify-between gap-2">
+        <span className="text-text-secondary truncate">{short}</span>
+        <span className="text-danger shrink-0">{count}</span>
+      </div>
+      {hasMore && (
+        <button
+          type="button"
+          className="text-[11px] text-text-secondary hover:text-text-primary underline"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? 'ocultar detalhe técnico' : 'ver detalhe técnico'}
+        </button>
+      )}
+      {open && (
+        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-background/60 p-2 text-[10px] text-text-secondary">
+          {reason}
+        </pre>
       )}
     </div>
   );
