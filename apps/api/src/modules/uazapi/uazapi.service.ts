@@ -426,6 +426,16 @@ export class UazApiService {
       );
     }
 
+    // Formato observado em producao: a API devolve o grupo atualizado, aninhado
+    // sob `group` e em PascalCase (mesmo shape de /group/list). Receber o grupo
+    // de volta e a confirmacao de que a escrita foi aceita.
+    if (added.length === 0 && failed.length === 0) {
+      const group = this.isGroupObject(data.group) ? data.group : data;
+      if (this.isGroupObject(group)) {
+        added = participantJids.map((jid) => ({ jid, status: '200' }));
+      }
+    }
+
     if (added.length === 0 && failed.length === 0) {
       // Nao reconhecido: falhar alto com o corpo cru e melhor que reportar
       // sucesso falso — o alvo pode ser re-tentado pelo painel.
@@ -439,6 +449,18 @@ export class UazApiService {
   /* ------------------------------------------------------------------ */
   /*  Internal helpers                                                   */
   /* ------------------------------------------------------------------ */
+
+  /**
+   * Um objeto de grupo da UazAPI: PascalCase, identificado por JID e com a
+   * lista de participantes junto. Exigir os dois evita confundir com um
+   * envelope de erro que por acaso tenha uma dessas chaves.
+   */
+  private isGroupObject(value: unknown): boolean {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return false;
+    const g = value as Record<string, unknown>;
+    return typeof g.JID === 'string' && Array.isArray(g.Participants);
+  }
 
   private parseState(raw: string | undefined): UazApiInstanceStatus['state'] {
     if (raw === 'connected' || raw === 'open') return 'connected';
