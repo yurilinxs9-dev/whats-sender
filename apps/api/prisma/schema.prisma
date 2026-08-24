@@ -494,6 +494,7 @@ model GroupAddJob {
   invited_count       Int             @default(0)
   added_count         Int             @default(0)
   failed_count        Int             @default(0)
+  not_joined_count    Int             @default(0)
   skipped_count       Int             @default(0)
   added_today         Int             @default(0)
   last_reset_at       DateTime        @default(now())
@@ -538,6 +539,9 @@ enum AddTargetStatus {
   PROCESSING
   DONE
   FAILED
+  // A API aceitou a escrita mas o membro nao apareceu na lista do grupo —
+  // tipicamente privacidade do WhatsApp bloqueando adicao direta.
+  NOT_JOINED
   SKIPPED
   INVITED
 }

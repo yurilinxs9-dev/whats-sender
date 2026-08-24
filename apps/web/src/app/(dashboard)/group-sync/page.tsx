@@ -148,6 +148,7 @@ const TARGET_STATUS: Record<string, { label: string; cls: string }> = {
   PENDING: { label: 'Pendente', cls: 'text-zinc-400' },
   PROCESSING: { label: 'Em curso', cls: 'text-warning' },
   DONE: { label: 'Adicionado', cls: 'text-green-400' },
+  NOT_JOINED: { label: 'Não entrou', cls: 'text-amber-400' },
   FAILED: { label: 'Falhou', cls: 'text-danger' },
   SKIPPED: { label: 'Pulado', cls: 'text-zinc-500' },
   INVITED: { label: 'Convidado', cls: 'text-blue-400' },
@@ -1226,7 +1227,9 @@ function AddJobReport({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const counts = job.counts ?? {};
-  const failedCount = counts.FAILED ?? 0;
+  // "Nao entrou" e falha de envio caem no mesmo balde para efeito de convite:
+  // os dois significam alguem que ficou de fora do grupo.
+  const failedCount = (counts.FAILED ?? 0) + (counts.NOT_JOINED ?? 0);
   const canInvite = !!job.invite_link;
 
   // A lista vem paginada: um job real tem centenas de alvos e antes o detalhe
@@ -1416,7 +1419,7 @@ function AddJobReport({
             {t.error && (
               <span className="text-text-secondary truncate">{t.error}</span>
             )}
-            {t.status === 'FAILED' && (
+            {(t.status === 'FAILED' || t.status === 'NOT_JOINED') && (
               <Button
                 size="sm"
                 variant="ghost"

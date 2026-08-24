@@ -405,9 +405,11 @@ export class GroupsService {
     const targets = await this.prisma.addTarget.findMany({
       where: {
         job_id: id,
+        // Sem alvos explicitos: convida quem nao entrou por qualquer motivo —
+        // falha de envio E "a API aceitou mas o membro nao apareceu no grupo".
         ...(dto.target_ids
           ? { id: { in: dto.target_ids } }
-          : { status: 'FAILED' }),
+          : { status: { in: ['FAILED', 'NOT_JOINED'] } }),
       },
       select: { id: true },
     });
@@ -448,8 +450,19 @@ export class GroupsService {
     if (job.status === 'RUNNING')
       throw new BadRequestException('Pause o job antes de re-tentar');
 
+    // Conta antes de mexer: os dois desfechos voltam para a fila, mas cada um
+    // desconta do seu proprio contador.
+    const [failed, notJoined] = await Promise.all([
+      this.prisma.addTarget.count({
+        where: { job_id: id, status: 'FAILED' },
+      }),
+      this.prisma.addTarget.count({
+        where: { job_id: id, status: 'NOT_JOINED' },
+      }),
+    ]);
+
     const { count } = await this.prisma.addTarget.updateMany({
-      where: { job_id: id, status: 'FAILED' },
+      where: { job_id: id, status: { in: ['FAILED', 'NOT_JOINED'] } },
       data: { status: 'PENDING', attempts: 0, error: null },
     });
     if (count === 0)
@@ -458,7 +471,8 @@ export class GroupsService {
     await this.prisma.groupAddJob.update({
       where: { id },
       data: {
-        failed_count: Math.max(0, job.failed_count - count),
+        failed_count: Math.max(0, job.failed_count - failed),
+        not_joined_count: Math.max(0, job.not_joined_count - notJoined),
         status: 'IDLE',
       },
     });
