@@ -83,6 +83,7 @@ interface ExtractionDetail extends Extraction {
 interface AddJob {
   id: string;
   nome: string;
+  dest_instance_id: string;
   dest_group_jid: string;
   dest_group_name: string;
   per_run_limit: number;
@@ -1604,6 +1605,8 @@ function AddJobSettings({
   const [cap, setCap] = useState(String(job.daily_add_cap));
   const [dMin, setDMin] = useState(String(job.delay_min_s));
   const [dMax, setDMax] = useState(String(job.delay_max_s));
+  const [instanceId, setInstanceId] = useState(job.dest_instance_id);
+  const { instances } = useInstancesAndGroups();
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -1618,6 +1621,9 @@ function AddJobSettings({
     setSaving(true);
     try {
       await api.patch(`/groups/add-jobs/${job.id}`, {
+        ...(instanceId !== job.dest_instance_id && {
+          dest_instance_id: instanceId,
+        }),
         per_run_limit: Number(perRun) || job.per_run_limit,
         daily_add_cap: Number(cap) || job.daily_add_cap,
         delay_min_s: Number(dMin) || job.delay_min_s,
@@ -1642,6 +1648,32 @@ function AddJobSettings({
           <DialogTitle>Configurações — {job.nome}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Instância</Label>
+            <p className="text-[11px] leading-snug text-text-secondary">
+              O número que faz as adições. Pode trocar se o chip caiu — o
+              progresso e o grupo de destino continuam os mesmos.
+            </p>
+            <Select value={instanceId} onValueChange={setInstanceId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma instância" />
+              </SelectTrigger>
+              <SelectContent>
+                {instances.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.nome}
+                    <span
+                      className={`ml-2 text-xs ${i.status === 'connected' ? 'text-primary' : 'text-zinc-500'}`}
+                    >
+                      {i.status === 'connected'
+                        ? '● conectada'
+                        : '○ desconectada'}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">Limite por rodada</Label>

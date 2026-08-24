@@ -9,8 +9,9 @@ import { GroupAddJobData } from '../queues/workers/group-add.worker';
 const JOB = { id: 'job-1', tenant_id: 't1', nome: 'Teste' };
 
 type PrismaStub = {
-  groupAddJob: { findFirst: jest.Mock };
+  groupAddJob: { findFirst: jest.Mock; update?: jest.Mock };
   addTarget: { groupBy: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+  instance?: { findFirst: jest.Mock };
 };
 
 function makeService(prisma: PrismaStub) {
@@ -34,7 +35,99 @@ function makePrisma(overrides: Partial<PrismaStub> = {}): PrismaStub {
   };
 }
 
+const CONNECTED = {
+  id: '11111111-1111-1111-1111-111111111111',
+  status: 'connected',
+  config: { uazapi_token: 'tok' },
+};
+
+function makeUpdatePrisma(
+  job: Record<string, unknown>,
+  instance: Record<string, unknown> | null,
+) {
+  return {
+    groupAddJob: {
+      findFirst: jest.fn().mockResolvedValue(job),
+      update: jest.fn().mockResolvedValue(job),
+    },
+    addTarget: {
+      groupBy: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    instance: { findFirst: jest.fn().mockResolvedValue(instance) },
+  } as unknown as PrismaStub;
+}
+
 describe('GroupsService', () => {
+  describe('updateAddJob — troca de instância', () => {
+    const JOB_IDLE = {
+      ...JOB,
+      status: 'IDLE',
+      dest_instance_id: '22222222-2222-2222-2222-222222222222',
+    };
+
+    it('troca a instância quando o job está parado e a nova está conectada', async () => {
+      const prisma = makeUpdatePrisma(JOB_IDLE, CONNECTED);
+
+      await makeService(prisma).updateAddJob('t1', 'job-1', {
+        dest_instance_id: CONNECTED.id,
+      });
+
+      const data = (prisma.groupAddJob.update as unknown as jest.Mock).mock
+        .calls[0][0].data as Record<string, unknown>;
+      expect(data.dest_instance_id).toBe(CONNECTED.id);
+    });
+
+    it('recusa trocar com o job rodando', async () => {
+      const prisma = makeUpdatePrisma(
+        { ...JOB_IDLE, status: 'RUNNING' },
+        CONNECTED,
+      );
+
+      await expect(
+        makeService(prisma).updateAddJob('t1', 'job-1', {
+          dest_instance_id: CONNECTED.id,
+        }),
+      ).rejects.toThrow(/Pause o job/);
+    });
+
+    it('recusa instância desconectada', async () => {
+      const prisma = makeUpdatePrisma(JOB_IDLE, {
+        ...CONNECTED,
+        status: 'disconnected',
+      });
+
+      await expect(
+        makeService(prisma).updateAddJob('t1', 'job-1', {
+          dest_instance_id: CONNECTED.id,
+        }),
+      ).rejects.toThrow(/conectada/);
+    });
+
+    it('recusa instância de outro tenant', async () => {
+      const prisma = makeUpdatePrisma(JOB_IDLE, null);
+
+      await expect(
+        makeService(prisma).updateAddJob('t1', 'job-1', {
+          dest_instance_id: CONNECTED.id,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('não checa instância quando o job só muda o ritmo', async () => {
+      const prisma = makeUpdatePrisma({ ...JOB_IDLE, status: 'RUNNING' }, null);
+
+      await makeService(prisma).updateAddJob('t1', 'job-1', {
+        per_run_limit: 10,
+      });
+
+      expect(
+        (prisma.instance as unknown as { findFirst: jest.Mock }).findFirst,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getAddJob', () => {
     it('não carrega a lista de alvos no detalhe do job', async () => {
       const prisma = makePrisma();

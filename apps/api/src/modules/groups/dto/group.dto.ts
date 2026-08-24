@@ -49,6 +49,10 @@ export type RunAddJobDto = z.infer<typeof RunAddJobSchema>;
 export const UpdateAddJobSchema = z
   .object({
     nome: z.string().min(1).max(100).optional(),
+    // Trocar a instancia de origem e permitido: o numero pode cair ou ser
+    // substituido no meio de um job. O grupo de destino nao muda — alvos ja
+    // processados fizeram parte de outro destino.
+    dest_instance_id: z.string().uuid().optional(),
     per_run_limit: z.number().int().min(1).max(500).optional(),
     daily_add_cap: z.number().int().min(1).max(500).optional(),
     delay_min_s: z.number().int().min(5).max(600).optional(),
