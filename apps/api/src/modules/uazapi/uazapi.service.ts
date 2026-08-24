@@ -429,11 +429,17 @@ export class UazApiService {
     // Formato observado em producao: a API devolve o grupo atualizado, aninhado
     // sob `group` e em PascalCase (mesmo shape de /group/list). Receber o grupo
     // de volta e a confirmacao de que a escrita foi aceita.
-    if (added.length === 0 && failed.length === 0) {
-      const group = this.isGroupObject(data.group) ? data.group : data;
-      if (this.isGroupObject(group)) {
-        added = participantJids.map((jid) => ({ jid, status: '200' }));
-      }
+    const group = this.isGroupObject(data.group) ? data.group : data;
+    const participants = this.isGroupObject(group)
+      ? this.readParticipantJids(group)
+      : [];
+
+    if (
+      added.length === 0 &&
+      failed.length === 0 &&
+      this.isGroupObject(group)
+    ) {
+      added = participantJids.map((jid) => ({ jid, status: '200' }));
     }
 
     if (added.length === 0 && failed.length === 0) {
@@ -443,7 +449,41 @@ export class UazApiService {
         `UazAPI addGroupParticipants: resposta em formato desconhecido — ${raw.slice(0, 300)}`,
       );
     }
-    return { added, failed };
+    return { added, failed, participants };
+  }
+
+  /**
+   * Extrai os JIDs de um objeto de grupo da UazAPI (PascalCase).
+   */
+  private readParticipantJids(group: unknown): string[] {
+    const g = group as Record<string, unknown>;
+    const raw = Array.isArray(g.Participants) ? g.Participants : [];
+    return raw
+      .map((p) => {
+        if (typeof p === 'string') return p;
+        const rec = p as Record<string, unknown>;
+        return typeof rec.JID === 'string'
+          ? rec.JID
+          : typeof rec.id === 'string'
+            ? rec.id
+            : '';
+      })
+      .filter((jid) => jid.length > 0);
+  }
+
+  /**
+   * Um membro esta na lista? Compara pela parte local do JID, porque o alvo e
+   * guardado como telefone puro e a API devolve o JID completo.
+   *
+   * Nao tenta resolver JIDs @lid: quando o WhatsApp devolve o participante sob
+   * um lid a correspondencia por telefone nao existe, e dizer "nao entrou" seria
+   * um falso negativo. Quem chama trata lista vazia como "nao sei".
+   */
+  isMemberInList(participants: string[], member: string): boolean {
+    const local = (v: string) => v.replace(/@.*$/, '').replace(/\D/g, '');
+    const target = local(member);
+    if (!target) return false;
+    return participants.some((p) => local(p) === target);
   }
 
   /* ------------------------------------------------------------------ */

@@ -41,4 +41,10 @@ export interface UazApiGroupParticipantsResult {
 export interface UazApiAddParticipantsResult {
   added: { jid: string; status: string }[];
   failed: { jid: string; status: string }[];
+  /**
+   * JIDs presentes no grupo depois da escrita, quando a API devolve o grupo
+   * atualizado. Vazio quando a resposta nao traz a lista — a confirmacao de
+   * entrada entao precisa de outra fonte.
+   */
+  participants: string[];
 }

@@ -155,6 +155,38 @@ export class GroupAddWorker extends WorkerHost {
       const errorStatus = result.failed[0]?.status;
 
       if (succeeded) {
+        // Escrita aceita nao e o mesmo que membro dentro do grupo: a
+        // privacidade do WhatsApp bloqueia adicao direta sem devolver erro.
+        const joined = await this.confirmJoined(
+          token,
+          addJob.dest_group_jid,
+          memberId,
+          result.participants,
+        );
+
+        if (joined === false) {
+          await this.markTarget(
+            targetId,
+            'NOT_JOINED',
+            'nao entrou no grupo (privacidade bloqueia adicao direta)',
+          );
+          await this.prisma.groupAddJob.update({
+            where: { id: jobId },
+            data: { not_joined_count: { increment: 1 } },
+          });
+          if (addJob.send_invite_on_fail && addJob.invite_link) {
+            await this.sendInvite(
+              addJob,
+              token,
+              targetId,
+              memberId,
+              'nao entrou no grupo (privacidade bloqueia adicao direta)',
+            );
+          }
+          await this.emitAndMaybeComplete(jobId, tenantId);
+          return;
+        }
+
         await this.prisma.addTarget.update({
           where: { id: targetId },
           data: { status: 'DONE', added_at: new Date() },
@@ -190,6 +222,43 @@ export class GroupAddWorker extends WorkerHost {
         data: { failed_count: { increment: 1 } },
       });
       await this.emitAndMaybeComplete(jobId, tenantId);
+    }
+  }
+
+  /**
+   * O membro esta mesmo no grupo depois da escrita?
+   *
+   * `true`  — apareceu na lista de participantes.
+   * `false` — a lista existe e ele nao esta nela.
+   * `null`  — nao deu para saber (a resposta nao trouxe lista e a leitura de
+   *           reserva falhou). Nesse caso quem chama mantem o desfecho otimista:
+   *           inventar "nao entrou" mandaria convite para quem ja esta dentro.
+   *
+   * A leitura de reserva e cara — baixa todos os grupos da instancia com os
+   * participantes — entao so roda quando a resposta da adicao veio sem lista.
+   */
+  private async confirmJoined(
+    token: string,
+    groupJid: string,
+    member: string,
+    participantsFromResponse: string[],
+  ): Promise<boolean | null> {
+    if (participantsFromResponse.length > 0) {
+      return this.uazapi.isMemberInList(participantsFromResponse, member);
+    }
+    try {
+      const { participants } = await this.uazapi.getGroupParticipants(
+        token,
+        groupJid,
+      );
+      const jids = participants.map((p) => p.id).filter(Boolean);
+      if (jids.length === 0) return null;
+      return this.uazapi.isMemberInList(jids, member);
+    } catch (error) {
+      this.logger.warn(
+        `Nao foi possivel confirmar entrada de ${member} em ${groupJid}: ${(error as Error).message}`,
+      );
+      return null;
     }
   }
 
@@ -269,7 +338,13 @@ export class GroupAddWorker extends WorkerHost {
       where: { id },
       data: {
         status: status as
-          'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'SKIPPED' | 'INVITED',
+          | 'PENDING'
+          | 'PROCESSING'
+          | 'DONE'
+          | 'FAILED'
+          | 'NOT_JOINED'
+          | 'SKIPPED'
+          | 'INVITED',
         ...(error && { error }),
       },
     });
