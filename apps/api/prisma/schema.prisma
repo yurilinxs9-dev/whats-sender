@@ -506,6 +506,9 @@ model GroupAddJob {
   // Quantos alvos ainda faltam processar da rodada atual: zera quando a rodada
   // acaba, e e o que distingue "acabou o lote" de "ainda esta rodando".
   run_remaining       Int             @default(0)
+  // Encadeia rodadas sozinho ate o cap diario. Desligado, cada lote exige um
+  // clique — util para observar o comportamento antes de subir volume.
+  auto_chain          Boolean         @default(true)
   last_run_at         DateTime?
   created_at          DateTime        @default(now())
   updated_at          DateTime        @updatedAt

@@ -1,8 +1,8 @@
-import { GroupAddWorker } from './group-add.worker';
+import { GroupAddWorker, GroupAddJobData } from './group-add.worker';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { UazApiService } from '../../uazapi/uazapi.service';
 import { SenderGateway } from '../../websocket/websocket.gateway';
-import { Job } from 'bullmq';
+import { Job, Queue } from 'bullmq';
 
 const JOB_ID = 'job-1';
 const TARGET_ID = 'target-1';
@@ -57,6 +57,7 @@ function makeWorker(
     prisma as unknown as PrismaService,
     uazapi as UazApiService,
     gateway as unknown as SenderGateway,
+    { add: jest.fn() } as unknown as Queue<GroupAddJobData>,
   );
   return { worker, gateway };
 }

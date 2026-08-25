@@ -414,6 +414,7 @@ export class GroupsService {
         ...(dto.send_invite_on_fail !== undefined && {
           send_invite_on_fail: dto.send_invite_on_fail,
         }),
+        ...(dto.auto_chain !== undefined && { auto_chain: dto.auto_chain }),
         ...(dto.invite_link !== undefined && { invite_link: dto.invite_link }),
         ...(dto.invite_message !== undefined && {
           invite_message: dto.invite_message,
