@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SenderGateway } from '../websocket/websocket.gateway';
 import { UazApiService } from '../uazapi/uazapi.service';
+import { EvolutionService } from '../whatsapp/evolution.service';
 import type { CreateInstanceDto } from './dto/create-instance.dto';
 import type { UpdateInstanceDto } from './dto/update-instance.dto';
 
@@ -33,6 +34,7 @@ export class InstancesService {
     private prisma: PrismaService,
     private gateway: SenderGateway,
     private uazApi: UazApiService,
+    private evolution: EvolutionService,
   ) {}
 
   async list({ tenantId, page, limit, search, status }: ListParams) {
@@ -86,20 +88,30 @@ export class InstancesService {
     if (existing)
       throw new ConflictException('Ja existe uma instancia com este nome');
 
-    // Create instance on UazAPI
-    const uazResult = await this.uazApi.createInstance(data.nome);
-    this.logger.log(
-      `UazAPI instance created: ${uazResult.name} token=${uazResult.token.slice(0, 8)}...`,
-    );
+    // O provedor escolhido decide onde a sessao vive e o que guardamos como
+    // credencial: token por instancia na UazAPI, nome da instancia no
+    // Evolution.
+    let config: Record<string, string>;
+    if (data.provider === 'evolution') {
+      await this.evolution.createInstance(data.nome);
+      this.logger.log(`Evolution instance created: ${data.nome}`);
+      config = { provider: 'evolution', evolution_instance: data.nome };
+    } else {
+      const uazResult = await this.uazApi.createInstance(data.nome);
+      this.logger.log(
+        `UazAPI instance created: ${uazResult.name} token=${uazResult.token.slice(0, 8)}...`,
+      );
+      config = {
+        uazapi_token: uazResult.token,
+        uazapi_instance_name: uazResult.name,
+      };
+    }
 
     const instance = await this.prisma.instance.create({
       data: {
         nome: data.nome,
         telefone: data.telefone,
-        config: {
-          uazapi_token: uazResult.token,
-          uazapi_instance_name: uazResult.name,
-        },
+        config,
         tenant_id: tenantId,
       },
     });
@@ -154,7 +166,11 @@ export class InstancesService {
 
     // Delete from UazAPI if we have a token
     const config = (instance.config as InstanceConfig) || {};
-    if (config.uazapi_token) {
+    const evolutionName = (config as { evolution_instance?: string })
+      .evolution_instance;
+    if (evolutionName) {
+      await this.evolution.deleteInstance(evolutionName);
+    } else if (config.uazapi_token) {
       try {
         await this.uazApi.deleteInstance(config.uazapi_token);
       } catch (err) {
@@ -206,6 +222,30 @@ export class InstancesService {
     if (!instance) throw new NotFoundException('Instancia nao encontrada');
 
     const config = (instance.config as InstanceConfig) || {};
+
+    if ((config as { provider?: string }).provider === 'evolution') {
+      const name =
+        (config as { evolution_instance?: string }).evolution_instance ??
+        instance.nome;
+      const { qrcode, pairingCode } =
+        await this.evolution.connectInstance(name);
+      const state = await this.evolution.getConnectionState(name);
+      await this.prisma.instance.update({
+        where: { id },
+        data: { status: state },
+      });
+      this.gateway.emitInstanceStatusChanged(instance.nome, state, tenantId);
+      return {
+        id: instance.id,
+        nome: instance.nome,
+        status: state,
+        qrcode,
+        pairingCode,
+        profileName: null,
+        owner: null,
+      };
+    }
+
     if (!config.uazapi_token) {
       throw new NotFoundException(
         'Instancia sem token UazAPI. Recrie a instancia.',

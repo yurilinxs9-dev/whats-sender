@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { InstancesService } from './instances.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { UazApiService } from '../uazapi/uazapi.service';
+import { EvolutionService } from '../whatsapp/evolution.service';
 import { SenderGateway } from '../websocket/websocket.gateway';
 
 const INSTANCE = { id: 'i1', nome: 'rafhtest1', tenant_id: 't1', config: {} };
@@ -22,6 +23,7 @@ function makeService(jobs: { nome: string }[]) {
     prisma as unknown as PrismaService,
     { emitInstanceStatusChanged: jest.fn() } as unknown as SenderGateway,
     {} as UazApiService,
+    { deleteInstance: jest.fn() } as unknown as EvolutionService,
   );
   return { service, prisma };
 }

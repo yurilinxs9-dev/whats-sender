@@ -164,6 +164,9 @@ export default function InstancesPage() {
 
   // Form
   const [formNome, setFormNome] = useState('');
+  const [formProvider, setFormProvider] = useState<'uazapi' | 'evolution'>(
+    'evolution',
+  );
   const [formTelefone, setFormTelefone] = useState('');
   const [formDailyLimit, setFormDailyLimit] = useState('1000');
   const [submitting, setSubmitting] = useState(false);
@@ -246,6 +249,7 @@ export default function InstancesPage() {
       const { data } = await api.post('/instances', {
         nome: formNome,
         telefone: formTelefone || undefined,
+        provider: formProvider,
       });
       toast.success('Instancia criada! Escaneie o QR Code para conectar.');
       setCreateOpen(false);
@@ -740,6 +744,43 @@ export default function InstancesPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Onde criar</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormProvider('evolution')}
+                  className={`rounded-lg border p-2.5 text-left ${
+                    formProvider === 'evolution'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="block text-xs font-medium text-text-primary">
+                    Evolution
+                  </span>
+                  <span className="block text-[11px] leading-snug text-text-secondary">
+                    Roda no nosso servidor.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormProvider('uazapi')}
+                  className={`rounded-lg border p-2.5 text-left ${
+                    formProvider === 'uazapi'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="block text-xs font-medium text-text-primary">
+                    UazAPI
+                  </span>
+                  <span className="block text-[11px] leading-snug text-text-secondary">
+                    Servidor de terceiro.
+                  </span>
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="create-nome">Nome da Instancia *</Label>
               <Input

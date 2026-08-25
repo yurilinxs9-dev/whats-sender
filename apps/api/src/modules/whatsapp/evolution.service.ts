@@ -147,6 +147,59 @@ export class EvolutionService implements WhatsAppProvider {
     }
   }
 
+  /**
+   * Cria a instancia no Evolution. O nome e a identidade: nao ha token por
+   * instancia, a autenticacao e a chave global.
+   */
+  async createInstance(name: string): Promise<{ name: string }> {
+    await this.post('/instance/create', {
+      instanceName: name,
+      qrcode: false,
+      integration: 'WHATSAPP-BAILEYS',
+    });
+    return { name };
+  }
+
+  /**
+   * Pede o QR. O Evolution devolve `base64` ja com o prefixo data:image, e
+   * `pairingCode` quando o pareamento e por codigo.
+   */
+  async connectInstance(
+    name: string,
+  ): Promise<{ qrcode: string | null; pairingCode: string | null }> {
+    const data = await this.get<{
+      base64?: string;
+      code?: string;
+      pairingCode?: string;
+    }>(`/instance/connect/${encodeURIComponent(name)}`);
+    return {
+      qrcode: data.base64 ?? null,
+      pairingCode: data.pairingCode ?? null,
+    };
+  }
+
+  async logoutInstance(name: string): Promise<void> {
+    try {
+      await this.request(
+        `/instance/logout/${encodeURIComponent(name)}`,
+        'DELETE',
+      );
+    } catch (error) {
+      this.logger.warn(`Evolution logout falhou: ${(error as Error).message}`);
+    }
+  }
+
+  async deleteInstance(name: string): Promise<void> {
+    try {
+      await this.request(
+        `/instance/delete/${encodeURIComponent(name)}`,
+        'DELETE',
+      );
+    } catch (error) {
+      this.logger.warn(`Evolution delete falhou: ${(error as Error).message}`);
+    }
+  }
+
   isMemberInList(participants: string[], member: string): boolean {
     const target = this.localPart(member);
     if (!target) return false;
@@ -169,7 +222,7 @@ export class EvolutionService implements WhatsAppProvider {
 
   private async request<T>(
     path: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'DELETE',
     body?: unknown,
   ): Promise<T> {
     const controller = new AbortController();

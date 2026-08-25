@@ -10,6 +10,9 @@ export const createInstanceSchema = z.object({
     .min(10, 'Telefone invalido')
     .max(20, 'Telefone invalido')
     .optional(),
+  // Onde a instancia vai viver. Sem escolha explicita, UazAPI — que e o que
+  // toda instancia existente e.
+  provider: z.enum(['uazapi', 'evolution']).default('uazapi'),
   config: z
     .object({
       uazapi_token: z.string().min(1, 'Token UazAPI e obrigatorio').optional(),
