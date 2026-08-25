@@ -62,6 +62,9 @@ services:
       - NODE_ENV=production
     networks:
       - sender-network
+      # O Evolution roda em outro compose, na sua propria rede: sem isto o
+      # backend nao resolve o nome do container e o provedor fica inalcancavel.
+      - evolution-network
 
   sender-nginx:
     image: nginx:alpine
@@ -79,6 +82,9 @@ services:
 networks:
   sender-network:
     driver: bridge
+  evolution-network:
+    external: true
+    name: ${EVOLUTION_NETWORK:-evolution_evo-internal}
 
 volumes:
   sender-pgdata:
