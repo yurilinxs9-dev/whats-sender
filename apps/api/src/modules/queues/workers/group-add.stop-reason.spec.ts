@@ -1,8 +1,8 @@
-import { GroupAddWorker } from './group-add.worker';
+import { GroupAddWorker, GroupAddJobData } from './group-add.worker';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { UazApiService } from '../../uazapi/uazapi.service';
 import { SenderGateway } from '../../websocket/websocket.gateway';
-import { Job } from 'bullmq';
+import { Job, Queue } from 'bullmq';
 
 const JOB_ID = 'job-1';
 const TARGET_ID = 'target-1';
@@ -47,6 +47,11 @@ function makePrisma(
         .mockResolvedValue({ id: TARGET_ID, phone: PHONE, member_jid: '' }),
       update: jest.fn().mockResolvedValue({}),
       count: jest.fn().mockResolvedValue(opts.pending ?? 1),
+      findMany: jest.fn().mockResolvedValue(
+        Array.from({ length: opts.pending ?? 1 }, (_, i) => ({
+          id: 'next-' + i,
+        })),
+      ),
     },
     tenantSettings: {
       findUnique: jest.fn().mockResolvedValue(opts.settings ?? null),
@@ -55,6 +60,7 @@ function makePrisma(
 }
 
 function makeWorker(prisma: ReturnType<typeof makePrisma>) {
+  const queue = { add: jest.fn() };
   const real = new UazApiService({
     get: (_k: string, fallback: string) => fallback,
   } as never);
@@ -73,8 +79,9 @@ function makeWorker(prisma: ReturnType<typeof makePrisma>) {
       isMemberInList: real.isMemberInList.bind(real),
     } as unknown as UazApiService,
     gateway as unknown as SenderGateway,
+    queue as unknown as Queue<GroupAddJobData>,
   );
-  return { worker, gateway };
+  return { worker, gateway, queue };
 }
 
 /** Junta o que foi gravado no job ao longo do processamento. */
@@ -147,6 +154,81 @@ describe('GroupAddWorker — por que o job parou', () => {
       jobWrites(prisma).find((d) => d.status === 'COMPLETED'),
     ).toBeDefined();
     expect(gateway.emitAddJobCompleted).toHaveBeenCalled();
+  });
+
+  it('encadeia a próxima rodada sozinho quando o cap do dia ainda cabe', async () => {
+    const prisma = makePrisma(
+      makeAddJob({ auto_chain: true, run_remaining: 1, added_today: 2 }),
+      { pending: 5 },
+    );
+    const { worker, queue } = makeWorker(prisma);
+
+    await worker.process(JOB);
+
+    expect(queue.add).toHaveBeenCalled();
+    expect(
+      jobWrites(prisma).find((d) => d.stop_reason === 'ROUND_DONE'),
+    ).toBeUndefined();
+    const run = jobWrites(prisma).find((d) => d.status === 'RUNNING');
+    expect(run).toBeDefined();
+  });
+
+  it('não encadeia além do cap: marca DAILY_CAP em vez de enfileirar', async () => {
+    // Entra na rodada com espaco para um alvo; ao terminar, o cap ja fechou.
+    const prisma = makePrisma(
+      makeAddJob({ auto_chain: true, run_remaining: 1, added_today: 9 }),
+      { pending: 5 },
+    );
+    // process() consulta o job varias vezes antes de terminar o alvo; so na
+    // ultima — ja dentro do encadeamento — o cap aparece fechado.
+    const comEspaco = makeAddJob({
+      auto_chain: true,
+      run_remaining: 1,
+      added_today: 9,
+    });
+    prisma.groupAddJob.findUnique
+      .mockResolvedValueOnce(comEspaco)
+      .mockResolvedValueOnce(comEspaco)
+      .mockResolvedValueOnce(comEspaco)
+      .mockResolvedValueOnce(comEspaco)
+      .mockResolvedValue(
+        makeAddJob({ auto_chain: true, run_remaining: 1, added_today: 10 }),
+      );
+    const { worker, queue } = makeWorker(prisma);
+
+    await worker.process(JOB);
+
+    expect(queue.add).not.toHaveBeenCalled();
+    expect(
+      jobWrites(prisma).find((d) => d.stop_reason === 'DAILY_CAP'),
+    ).toBeDefined();
+  });
+
+  it('com encadeamento desligado, para e espera o clique', async () => {
+    const prisma = makePrisma(
+      makeAddJob({ auto_chain: false, run_remaining: 1 }),
+      { pending: 5 },
+    );
+    const { worker, queue } = makeWorker(prisma);
+
+    await worker.process(JOB);
+
+    expect(queue.add).not.toHaveBeenCalled();
+    expect(
+      jobWrites(prisma).find((d) => d.stop_reason === 'ROUND_DONE'),
+    ).toBeDefined();
+  });
+
+  it('não encadeia um job pausado', async () => {
+    const prisma = makePrisma(
+      makeAddJob({ auto_chain: true, run_remaining: 1, status: 'PAUSED' }),
+      { pending: 5 },
+    );
+    const { worker, queue } = makeWorker(prisma);
+
+    await worker.process(JOB);
+
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('limpa o motivo anterior ao processar um alvo', async () => {

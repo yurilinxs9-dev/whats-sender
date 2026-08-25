@@ -1,4 +1,5 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { QUEUE_GROUP_ADD } from '../queue-constants';
@@ -37,6 +38,7 @@ export class GroupAddWorker extends WorkerHost {
     private prisma: PrismaService,
     private uazapi: UazApiService,
     private gateway: SenderGateway,
+    @InjectQueue(QUEUE_GROUP_ADD) private queue: Queue<GroupAddJobData>,
   ) {
     super();
   }
@@ -358,29 +360,103 @@ export class GroupAddWorker extends WorkerHost {
       return;
     }
 
-    // Sobrou alvo mas a rodada esgotou o lote: parou por decisao do operador,
-    // nao por bloqueio. Retomar e um clique em "Rodar lote" — e a tela precisa
-    // dizer isso, senao parece que o job travou.
+    // Sobrou alvo e a rodada esgotou o lote. Com encadeamento ligado o proprio
+    // worker abre a rodada seguinte ate o cap do dia; sem ele, para e espera
+    // um clique.
     const remaining = Math.max(0, (updated.run_remaining ?? 0) - 1);
     await this.prisma.groupAddJob.update({
       where: { id: jobId },
+      data: { run_remaining: remaining },
+    });
+    if (remaining > 0) return;
+
+    if (updated.auto_chain && updated.status !== 'PAUSED') {
+      const queued = await this.chainNextRound(jobId, tenantId);
+      if (queued > 0) return;
+    }
+
+    await this.prisma.groupAddJob.update({
+      where: { id: jobId },
       data: {
-        run_remaining: remaining,
-        ...(remaining === 0 && {
-          status: 'IDLE',
-          stop_reason: 'ROUND_DONE',
-          resume_at: null,
-          last_run_at: new Date(),
-        }),
+        status: 'IDLE',
+        stop_reason: 'ROUND_DONE',
+        resume_at: null,
+        last_run_at: new Date(),
       },
     });
-    if (remaining === 0) {
-      this.gateway.emitAddJobProgress(
+    this.gateway.emitAddJobProgress(
+      jobId,
+      { status: 'IDLE', stop_reason: 'ROUND_DONE' },
+      tenantId,
+    );
+  }
+
+  /**
+   * Enfileira a proxima rodada respeitando o que ainda cabe no cap do dia.
+   * Devolve quantos alvos entraram na fila — zero significa que nao havia
+   * espaco no cap ou alvo pendente, e quem chama decide o que exibir.
+   */
+  private async chainNextRound(
+    jobId: string,
+    tenantId: string,
+  ): Promise<number> {
+    const job = await this.prisma.groupAddJob.findUnique({
+      where: { id: jobId },
+    });
+    if (!job) return 0;
+
+    const room = job.daily_add_cap - job.added_today;
+    if (room <= 0) {
+      const msUntilMidnight = this.msUntilHour(DAILY_RESET_HOUR + 1);
+      await this.markStopped(
         jobId,
-        { status: 'IDLE', stop_reason: 'ROUND_DONE' },
         tenantId,
+        'DAILY_CAP',
+        new Date(Date.now() + msUntilMidnight),
+      );
+      return 0;
+    }
+
+    const size = Math.min(job.per_run_limit, room);
+    const pending = await this.prisma.addTarget.findMany({
+      where: { job_id: jobId, status: 'PENDING' },
+      select: { id: true },
+      take: size,
+    });
+    if (pending.length === 0) return 0;
+
+    let cumMs = 0;
+    for (const target of pending) {
+      const gapS =
+        job.delay_min_s +
+        Math.random() * Math.max(0, job.delay_max_s - job.delay_min_s);
+      cumMs += Math.round(gapS * 1000);
+      await this.queue.add(
+        'add-target',
+        { jobId, targetId: target.id, tenantId },
+        {
+          delay: cumMs,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 },
+          removeOnComplete: { count: 1000 },
+          removeOnFail: { count: 500 },
+        },
       );
     }
+
+    await this.prisma.groupAddJob.update({
+      where: { id: jobId },
+      data: {
+        status: 'RUNNING',
+        run_remaining: pending.length,
+        stop_reason: null,
+        resume_at: null,
+      },
+    });
+    this.logger.log(
+      `AddJob ${jobId}: encadeou rodada de ${pending.length} (cap restante ${room}).`,
+    );
+    return pending.length;
   }
 
   /**

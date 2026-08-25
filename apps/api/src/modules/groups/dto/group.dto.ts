@@ -58,6 +58,7 @@ export const UpdateAddJobSchema = z
     delay_min_s: z.number().int().min(5).max(600).optional(),
     delay_max_s: z.number().int().min(5).max(600).optional(),
     send_invite_on_fail: z.boolean().optional(),
+    auto_chain: z.boolean().optional(),
     invite_link: z.string().url().max(300).nullable().optional(),
     invite_message: z.string().min(1).max(1000).optional(),
   })

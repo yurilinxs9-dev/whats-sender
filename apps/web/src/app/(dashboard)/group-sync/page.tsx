@@ -92,6 +92,7 @@ interface AddJob {
   delay_min_s: number;
   delay_max_s: number;
   send_invite_on_fail: boolean;
+  auto_chain: boolean;
   invite_link: string | null;
   invite_message: string;
   invited_count: number;
@@ -1614,6 +1615,7 @@ function AddJobSettings({
   const [dMin, setDMin] = useState(String(job.delay_min_s));
   const [dMax, setDMax] = useState(String(job.delay_max_s));
   const [instanceId, setInstanceId] = useState(job.dest_instance_id);
+  const [autoChain, setAutoChain] = useState(job.auto_chain ?? true);
   const { instances } = useInstancesAndGroups();
   const [saving, setSaving] = useState(false);
 
@@ -1637,6 +1639,7 @@ function AddJobSettings({
         delay_min_s: Number(dMin) || job.delay_min_s,
         delay_max_s: Number(dMax) || job.delay_max_s,
         send_invite_on_fail: enabled,
+        auto_chain: autoChain,
         invite_link: link.trim() || null,
         invite_message: message,
       });
@@ -1715,6 +1718,25 @@ function AddJobSettings({
               <Input value={dMax} onChange={(e) => setDMax(e.target.value)} />
             </div>
           </div>
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={autoChain}
+              onChange={(e) => setAutoChain(e.target.checked)}
+            />
+            <span>
+              <span className="text-xs font-medium text-text-primary">
+                Encadear rodadas até o cap diário
+              </span>
+              <span className="block text-[11px] leading-snug text-text-secondary">
+                Ligado, o job continua sozinho lote após lote até bater o cap do
+                dia. Desligado, cada lote exige um clique em &quot;Rodar
+                lote&quot; — útil para observar antes de subir volume.
+              </span>
+            </span>
+          </label>
+
           <InviteFields
             enabled={enabled}
             link={link}
