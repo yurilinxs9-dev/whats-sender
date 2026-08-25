@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   NotFoundException,
   ConflictException,
   Logger,
@@ -161,6 +162,22 @@ export class InstancesService {
           `Failed to delete UazAPI instance: ${(err as Error).message}`,
         );
       }
+    }
+
+    // Jobs de adicao apontam para a instancia sem cascade — apagar levaria
+    // junto o progresso deles. Recusar com o motivo e melhor que devolver a
+    // violacao de chave estrangeira crua, e a saida existe: trocar a
+    // instancia do job em Config.
+    const jobs = await this.prisma.groupAddJob.findMany({
+      where: { dest_instance_id: id },
+      select: { nome: true },
+    });
+    if (jobs.length > 0) {
+      const nomes = jobs.map((j) => j.nome).join(', ');
+      throw new BadRequestException(
+        `Instância usada por ${jobs.length} job(s) de adição (${nomes}). ` +
+          'Troque a instância desses jobs em Config antes de remover.',
+      );
     }
 
     // Clean up related records that don't have onDelete: Cascade
