@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { UazApiService } from '../uazapi/uazapi.service';
+import { ProviderResolver } from '../whatsapp/provider-resolver.service';
 import { SenderGateway } from '../websocket/websocket.gateway';
 import { Queue } from 'bullmq';
 import { GroupAddJobData } from '../queues/workers/group-add.worker';
@@ -18,6 +19,12 @@ function makeService(prisma: PrismaStub) {
   return new GroupsService(
     prisma as unknown as PrismaService,
     {} as UazApiService,
+    {
+      resolve: (config: unknown) =>
+        config && (config as { uazapi_token?: string }).uazapi_token
+          ? { provider: {}, credential: 'tok' }
+          : null,
+    } as unknown as ProviderResolver,
     {} as SenderGateway,
     {} as Queue<GroupAddJobData>,
   );
@@ -125,6 +132,48 @@ describe('GroupsService', () => {
       expect(
         (prisma.instance as unknown as { findFirst: jest.Mock }).findFirst,
       ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateAddJob — instância evolution', () => {
+    it('aceita trocar para uma instância do Evolution, que não tem token', async () => {
+      const prisma = makeUpdatePrisma(
+        {
+          ...JOB,
+          status: 'IDLE',
+          dest_instance_id: '22222222-2222-2222-2222-222222222222',
+        },
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          status: 'connected',
+          config: { provider: 'evolution', evolution_instance: 'grupos-01' },
+        },
+      );
+      const service = new GroupsService(
+        prisma as unknown as PrismaService,
+        {} as UazApiService,
+        {
+          resolve: (config: unknown) => {
+            const c = config as Record<string, unknown> | null;
+            if (c?.provider === 'evolution')
+              return { provider: {}, credential: c.evolution_instance };
+            if (c?.uazapi_token) return { provider: {}, credential: 'tok' };
+            return null;
+          },
+        } as unknown as ProviderResolver,
+        {} as SenderGateway,
+        {} as Queue<GroupAddJobData>,
+      );
+
+      await service.updateAddJob('t1', 'job-1', {
+        dest_instance_id: '11111111-1111-1111-1111-111111111111',
+      });
+
+      const data = (prisma.groupAddJob.update as unknown as jest.Mock).mock
+        .calls[0][0].data as Record<string, unknown>;
+      expect(data.dest_instance_id).toBe(
+        '11111111-1111-1111-1111-111111111111',
+      );
     });
   });
 
