@@ -21,6 +21,7 @@ import {
   Link2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { errMsg } from '@/lib/err-msg';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -224,12 +225,6 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
         style={{ width: `${pct}%` }}
       />
     </div>
-  );
-}
-function errMsg(e: unknown, fallback: string) {
-  return (
-    (e as { response?: { data?: { message?: string } } })?.response?.data
-      ?.message ?? fallback
   );
 }
 function GroupSelect({
