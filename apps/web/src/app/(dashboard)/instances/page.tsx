@@ -19,6 +19,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { errMsg } from '@/lib/err-msg';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/stores/auth.store';
@@ -183,8 +184,8 @@ export default function InstancesPage() {
       });
       setInstances(data.instances);
       setTotal(data.total);
-    } catch {
-      toast.error('Erro ao carregar instancias');
+    } catch (e) {
+      toast.error(errMsg(e, 'Erro ao carregar instancias'));
     } finally {
       setLoading(false);
     }
@@ -284,8 +285,8 @@ export default function InstancesPage() {
 
       // Start polling for status updates
       startQrPolling(instance.id);
-    } catch {
-      toast.error('Erro ao gerar QR Code');
+    } catch (e) {
+      toast.error(errMsg(e, 'Erro ao gerar QR Code'));
     } finally {
       setQrLoading(false);
     }
@@ -382,8 +383,8 @@ export default function InstancesPage() {
       setDeleteOpen(false);
       setSelectedInstance(null);
       fetchInstances();
-    } catch {
-      toast.error('Erro ao remover instancia');
+    } catch (e) {
+      toast.error(errMsg(e, 'Erro ao remover instancia'));
     } finally {
       setSubmitting(false);
     }
@@ -394,8 +395,8 @@ export default function InstancesPage() {
     try {
       await api.post(`/instances/${instance.id}/disconnect`);
       toast.success(`${instance.nome} desconectada`);
-    } catch {
-      toast.error('Erro ao desconectar instancia');
+    } catch (e) {
+      toast.error(errMsg(e, 'Erro ao desconectar instancia'));
     }
   };
 
