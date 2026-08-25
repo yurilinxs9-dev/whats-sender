@@ -5,6 +5,10 @@ import { Job } from 'bullmq';
 import { QUEUE_GROUP_ADD } from '../queue-constants';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { UazApiService } from '../../uazapi/uazapi.service';
+import {
+  ProviderResolver,
+  ResolvedProvider,
+} from '../../whatsapp/provider-resolver.service';
 import { SenderGateway } from '../../websocket/websocket.gateway';
 
 export interface GroupAddJobData {
@@ -18,16 +22,6 @@ export interface GroupAddJobData {
 
 const DAILY_RESET_HOUR = 0;
 
-function extractToken(config: unknown): string | null {
-  if (config && typeof config === 'object' && !Array.isArray(config)) {
-    const c = config as Record<string, unknown>;
-    if (typeof c.uazapi_token === 'string' && c.uazapi_token.length > 0) {
-      return c.uazapi_token;
-    }
-  }
-  return null;
-}
-
 @Processor(QUEUE_GROUP_ADD, {
   limiter: { max: 3, duration: 60_000 },
 })
@@ -38,6 +32,7 @@ export class GroupAddWorker extends WorkerHost {
     private prisma: PrismaService,
     private uazapi: UazApiService,
     private gateway: SenderGateway,
+    private providers: ProviderResolver,
     @InjectQueue(QUEUE_GROUP_ADD) private queue: Queue<GroupAddJobData>,
   ) {
     super();
@@ -53,12 +48,14 @@ export class GroupAddWorker extends WorkerHost {
 
     if (mode === 'invite') {
       if (!addJob) return;
-      const inviteToken = extractToken(addJob.dest_instance?.config);
-      if (!inviteToken) {
+      const inviteResolved = this.providers.resolve(
+        addJob.dest_instance?.config,
+      );
+      if (!inviteResolved) {
         await this.markTarget(
           targetId,
           'FAILED',
-          'instância destino sem token UazAPI',
+          'instância destino sem credencial do provedor de WhatsApp',
         );
         return;
       }
@@ -68,7 +65,7 @@ export class GroupAddWorker extends WorkerHost {
       if (!inviteTarget) return;
       await this.sendInvite(
         addJob,
-        inviteToken,
+        inviteResolved,
         inviteTarget.id,
         inviteTarget.phone || inviteTarget.member_jid,
       );
@@ -131,12 +128,12 @@ export class GroupAddWorker extends WorkerHost {
       });
     }
 
-    const token = extractToken(addJob.dest_instance?.config);
-    if (!token) {
+    const resolved = this.providers.resolve(addJob.dest_instance?.config);
+    if (!resolved) {
       await this.markTarget(
         targetId,
         'FAILED',
-        'instância destino sem token UazAPI',
+        'instância destino sem credencial do provedor de WhatsApp',
       );
       await this.prisma.groupAddJob.update({
         where: { id: jobId },
@@ -180,7 +177,7 @@ export class GroupAddWorker extends WorkerHost {
         await this.emitAndMaybeComplete(jobId, tenantId);
         return;
       }
-      await this.sendInvite(addJob, token, targetId, memberId);
+      await this.sendInvite(addJob, resolved, targetId, memberId);
       // Convite consome o mesmo teto diario da adicao: o que o cap protege e
       // o numero, e mensagem em massa cansa tanto quanto adicao em massa.
       await this.prisma.groupAddJob.update({
@@ -192,8 +189,8 @@ export class GroupAddWorker extends WorkerHost {
     }
 
     try {
-      const result = await this.uazapi.addGroupParticipants(
-        token,
+      const result = await resolved.provider.addGroupParticipants(
+        resolved.credential,
         addJob.dest_group_jid,
         [memberId],
       );
@@ -207,7 +204,7 @@ export class GroupAddWorker extends WorkerHost {
         // Escrita aceita nao e o mesmo que membro dentro do grupo: a
         // privacidade do WhatsApp bloqueia adicao direta sem devolver erro.
         const joined = await this.confirmJoined(
-          token,
+          resolved,
           addJob.dest_group_jid,
           memberId,
           result.participants,
@@ -226,7 +223,7 @@ export class GroupAddWorker extends WorkerHost {
           if (addJob.send_invite_on_fail && addJob.invite_link) {
             await this.sendInvite(
               addJob,
-              token,
+              resolved,
               targetId,
               memberId,
               'nao entrou no grupo (privacidade bloqueia adicao direta)',
@@ -256,7 +253,7 @@ export class GroupAddWorker extends WorkerHost {
         });
         // Fallback automatico: so quando o toggle esta ligado E existe link cadastrado.
         if (addJob.send_invite_on_fail && addJob.invite_link) {
-          await this.sendInvite(addJob, token, targetId, memberId, reason);
+          await this.sendInvite(addJob, resolved, targetId, memberId, reason);
         }
       }
 
@@ -287,22 +284,23 @@ export class GroupAddWorker extends WorkerHost {
    * participantes — entao so roda quando a resposta da adicao veio sem lista.
    */
   private async confirmJoined(
-    token: string,
+    resolved: ResolvedProvider,
     groupJid: string,
     member: string,
     participantsFromResponse: string[],
   ): Promise<boolean | null> {
+    const { provider, credential } = resolved;
     if (participantsFromResponse.length > 0) {
-      return this.uazapi.isMemberInList(participantsFromResponse, member);
+      return provider.isMemberInList(participantsFromResponse, member);
     }
     try {
-      const { participants } = await this.uazapi.getGroupParticipants(
-        token,
+      const { participants } = await provider.getGroupParticipants(
+        credential,
         groupJid,
       );
       const jids = participants.map((p) => p.id).filter(Boolean);
       if (jids.length === 0) return null;
-      return this.uazapi.isMemberInList(jids, member);
+      return provider.isMemberInList(jids, member);
     } catch (error) {
       this.logger.warn(
         `Nao foi possivel confirmar entrada de ${member} em ${groupJid}: ${(error as Error).message}`,
@@ -318,7 +316,7 @@ export class GroupAddWorker extends WorkerHost {
    */
   private async sendInvite(
     addJob: { id: string; invite_link: string | null; invite_message: string },
-    token: string,
+    resolved: ResolvedProvider,
     targetId: string,
     phone: string,
     addFailureReason?: string,
@@ -326,7 +324,11 @@ export class GroupAddWorker extends WorkerHost {
     if (!addJob.invite_link) return;
     const text = addJob.invite_message.replace(/\{link\}/g, addJob.invite_link);
     try {
-      const res = await this.uazapi.sendText(token, phone, text);
+      const res = await resolved.provider.sendText(
+        resolved.credential,
+        phone,
+        text,
+      );
       if (!res.success) throw new Error(res.error ?? 'falha ao enviar convite');
       await this.prisma.addTarget.update({
         where: { id: targetId },

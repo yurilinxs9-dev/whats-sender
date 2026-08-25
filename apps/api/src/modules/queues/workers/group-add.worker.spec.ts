@@ -2,6 +2,7 @@ import { GroupAddWorker, GroupAddJobData } from './group-add.worker';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { UazApiService } from '../../uazapi/uazapi.service';
 import { SenderGateway } from '../../websocket/websocket.gateway';
+import { ProviderResolver } from '../../whatsapp/provider-resolver.service';
 import { Job, Queue } from 'bullmq';
 
 const JOB_ID = 'job-1';
@@ -57,6 +58,12 @@ function makeWorker(
     prisma as unknown as PrismaService,
     uazapi as UazApiService,
     gateway as unknown as SenderGateway,
+    {
+      resolve: (config: unknown) =>
+        config && (config as { uazapi_token?: string }).uazapi_token
+          ? { provider: uazapi, credential: 'tok' }
+          : null,
+    } as unknown as ProviderResolver,
     { add: jest.fn() } as unknown as Queue<GroupAddJobData>,
   );
   return { worker, gateway };
