@@ -8,6 +8,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { UazApiService } from '../uazapi/uazapi.service';
+import { ProviderResolver } from '../whatsapp/provider-resolver.service';
 import { SenderGateway } from '../websocket/websocket.gateway';
 import { QUEUE_GROUP_ADD } from '../queues/queue-constants';
 import {
@@ -26,6 +27,7 @@ export class GroupsService {
   constructor(
     private prisma: PrismaService,
     private uazapi: UazApiService,
+    private providers: ProviderResolver,
     private gateway: SenderGateway,
     @InjectQueue(QUEUE_GROUP_ADD) private groupAddQueue: Queue<GroupAddJobData>,
   ) {}
@@ -89,11 +91,12 @@ export class GroupsService {
     const instance = await this.prisma.instance.findUnique({
       where: { id: extraction.instance_id },
     });
-    const token = this.extractToken(instance?.config);
-    if (!token) throw new Error('Instância sem token UazAPI. Reconecte.');
+    const resolved = this.providers.resolve(instance?.config);
+    if (!resolved)
+      throw new Error('Instância sem credencial do provedor. Reconecte.');
 
-    const result = await this.uazapi.getGroupParticipants(
-      token,
+    const result = await resolved.provider.getGroupParticipants(
+      resolved.credential,
       extraction.source_group_jid,
     );
 
@@ -309,9 +312,9 @@ export class GroupsService {
     const destInstance = await this.prisma.instance.findUnique({
       where: { id: job.dest_instance_id },
     });
-    if (!this.extractToken(destInstance?.config)) {
+    if (!this.providers.resolve(destInstance?.config)) {
       throw new BadRequestException(
-        'Instância destino sem token UazAPI. Reconecte.',
+        'Instância destino sem credencial do provedor. Reconecte.',
       );
     }
 
@@ -390,9 +393,9 @@ export class GroupsService {
         throw new BadRequestException(
           'Instância destino precisa estar conectada',
         );
-      if (!this.extractToken(instance.config))
+      if (!this.providers.resolve(instance.config))
         throw new BadRequestException(
-          'Instância destino sem token UazAPI. Reconecte.',
+          'Instância destino sem credencial do provedor. Reconecte.',
         );
     }
 
@@ -554,10 +557,12 @@ export class GroupsService {
       where: { id: instanceId, tenant_id: tenantId },
     });
     if (!instance) throw new NotFoundException('Instância não encontrada');
-    const token = this.extractToken(instance.config);
-    if (!token)
-      throw new BadRequestException('Instância sem token UazAPI. Reconecte.');
-    return this.uazapi.listGroups(token);
+    const resolved = this.providers.resolve(instance.config);
+    if (!resolved)
+      throw new BadRequestException(
+        'Instância sem credencial do provedor. Reconecte.',
+      );
+    return resolved.provider.listGroups(resolved.credential);
   }
 
   private async assertExtraction(tenantId: string, id: string) {
@@ -574,15 +579,5 @@ export class GroupsService {
     });
     if (!j) throw new NotFoundException('Job de adição não encontrado');
     return j;
-  }
-
-  private extractToken(config: unknown): string | null {
-    if (config && typeof config === 'object' && !Array.isArray(config)) {
-      const c = config as Record<string, unknown>;
-      if (typeof c.uazapi_token === 'string' && c.uazapi_token.length > 0) {
-        return c.uazapi_token;
-      }
-    }
-    return null;
   }
 }
