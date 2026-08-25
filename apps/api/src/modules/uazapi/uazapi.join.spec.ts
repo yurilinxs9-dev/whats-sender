@@ -40,6 +40,32 @@ describe('UazApiService — confirmação de entrada', () => {
     ]);
   });
 
+  it('encontra o membro quando o grupo identifica todo mundo por @lid', async () => {
+    // Formato real deste servidor: JID e LID sao @lid e o telefone so aparece
+    // em PhoneNumber. Ler apenas JID marcava como "nao entrou" quem entrou.
+    mockFetch(200, {
+      group: {
+        JID: 'g@g.us',
+        Participants: [
+          {
+            JID: '248747544043762@lid',
+            PhoneNumber: '5516988572899@s.whatsapp.net',
+            LID: '248747544043762@lid',
+            IsAdmin: false,
+          },
+        ],
+      },
+    });
+
+    const result = await service.addGroupParticipants('t', 'g@g.us', [
+      '5516988572899',
+    ]);
+
+    expect(service.isMemberInList(result.participants, '5516988572899')).toBe(
+      true,
+    );
+  });
+
   it('devolve lista vazia quando a resposta não traz participantes', async () => {
     mockFetch(200, {
       added: [{ jid: '5511947943404', status: '200' }],

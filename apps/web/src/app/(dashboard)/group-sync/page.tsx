@@ -167,8 +167,14 @@ const TARGET_STATUS: Record<string, { label: string; cls: string }> = {
 function stopReasonText(
   reason: string | null | undefined,
   resumeAt: string | null | undefined,
+  job?: { added_today: number; daily_add_cap: number; per_run_limit: number },
 ): { title: string; hint: string } | null {
   if (!reason) return null;
+  // Quanto ainda cabe hoje decide se o proximo clique adiciona tudo, uma
+  // parte, ou nada — e essa e a duvida real de quem esta olhando a tela.
+  const resta = job ? Math.max(0, job.daily_add_cap - job.added_today) : null;
+  const proximoLote =
+    job && resta !== null ? Math.min(job.per_run_limit, resta) : null;
   const hora = resumeAt
     ? new Date(resumeAt).toLocaleTimeString('pt-BR', {
         hour: '2-digit',
@@ -178,14 +184,17 @@ function stopReasonText(
   if (reason === 'ROUND_DONE')
     return {
       title: 'Rodada concluída',
-      hint: 'Clique em "Rodar lote" para adicionar o próximo lote.',
+      hint:
+        proximoLote && proximoLote > 0
+          ? `Clique em "Rodar lote" para adicionar os próximos ${proximoLote}. Restam ${resta} do cap de hoje.`
+          : 'Clique em "Rodar lote" para adicionar o próximo lote.',
     };
   if (reason === 'DAILY_CAP')
     return {
       title: 'Cap diário atingido',
       hint: hora
-        ? `Retoma sozinho a partir das ${hora}. Não precisa clicar.`
-        : 'Retoma sozinho depois da meia-noite. Não precisa clicar.',
+        ? `Já foram ${job?.added_today ?? 0} hoje. Os pendentes continuam na fila e voltam sozinhos a partir das ${hora}.`
+        : 'Os pendentes continuam na fila e voltam sozinhos depois da meia-noite.',
     };
   if (reason === 'OUTSIDE_WINDOW')
     return {
@@ -936,7 +945,11 @@ function AddJobsTab() {
                         <ProgressBar value={done} max={total} />
                       </div>
                       {(() => {
-                        const stop = stopReasonText(j.stop_reason, j.resume_at);
+                        const stop = stopReasonText(
+                          j.stop_reason,
+                          j.resume_at,
+                          j,
+                        );
                         if (!stop) return null;
                         return (
                           <div className="mt-3 rounded-lg border border-border bg-background/40 px-3 py-2">
