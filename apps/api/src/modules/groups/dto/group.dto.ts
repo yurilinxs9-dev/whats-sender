@@ -59,6 +59,7 @@ export const UpdateAddJobSchema = z
     delay_max_s: z.number().int().min(5).max(600).optional(),
     send_invite_on_fail: z.boolean().optional(),
     auto_chain: z.boolean().optional(),
+    strategy: z.enum(['ADD', 'INVITE']).optional(),
     invite_link: z.string().url().max(300).nullable().optional(),
     invite_message: z.string().min(1).max(1000).optional(),
   })
@@ -79,7 +80,11 @@ export const UpdateAddJobSchema = z
       message: 'A mensagem precisa conter {link}',
       path: ['invite_message'],
     },
-  );
+  )
+  .refine((d) => d.strategy !== 'INVITE' || d.invite_link !== null, {
+    message: 'Modo convite exige o link do grupo',
+    path: ['invite_link'],
+  });
 export type UpdateAddJobDto = z.infer<typeof UpdateAddJobSchema>;
 
 // Enviar convite manualmente. Sem target_ids = todos os alvos que falharam.

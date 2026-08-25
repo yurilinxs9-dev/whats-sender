@@ -396,6 +396,16 @@ export class GroupsService {
         );
     }
 
+    // Modo convite sem link nao envia nada: recusa antes de gravar, senao o
+    // job so descobriria isso alvo a alvo, marcando todos como falha.
+    const linkFinal =
+      dto.invite_link !== undefined ? dto.invite_link : job.invite_link;
+    if (dto.strategy === 'INVITE' && !linkFinal) {
+      throw new BadRequestException(
+        'Cadastre o link de convite do grupo antes de usar o modo convite',
+      );
+    }
+
     await this.prisma.groupAddJob.update({
       where: { id },
       data: {
@@ -415,6 +425,7 @@ export class GroupsService {
           send_invite_on_fail: dto.send_invite_on_fail,
         }),
         ...(dto.auto_chain !== undefined && { auto_chain: dto.auto_chain }),
+        ...(dto.strategy !== undefined && { strategy: dto.strategy }),
         ...(dto.invite_link !== undefined && { invite_link: dto.invite_link }),
         ...(dto.invite_message !== undefined && {
           invite_message: dto.invite_message,

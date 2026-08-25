@@ -509,6 +509,9 @@ model GroupAddJob {
   // Encadeia rodadas sozinho ate o cap diario. Desligado, cada lote exige um
   // clique — util para observar o comportamento antes de subir volume.
   auto_chain          Boolean         @default(true)
+  // Como o job entra em contato. ADD empurra a pessoa para dentro do grupo;
+  // INVITE manda o link no privado e deixa ela decidir.
+  strategy            AddJobStrategy  @default(ADD)
   last_run_at         DateTime?
   created_at          DateTime        @default(now())
   updated_at          DateTime        @updatedAt
@@ -517,6 +520,14 @@ model GroupAddJob {
 
   @@index([tenant_id])
   @@index([status])
+}
+
+// Adicao direta e convite tem custos diferentes: a primeira e vista como spam
+// pelo WhatsApp e derruba o dispositivo vinculado; a segunda depende de a
+// pessoa aceitar.
+enum AddJobStrategy {
+  ADD
+  INVITE
 }
 
 // Motivo da parada — cada um pede uma acao diferente de quem opera.

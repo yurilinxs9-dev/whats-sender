@@ -93,6 +93,7 @@ interface AddJob {
   delay_max_s: number;
   send_invite_on_fail: boolean;
   auto_chain: boolean;
+  strategy: 'ADD' | 'INVITE';
   invite_link: string | null;
   invite_message: string;
   invited_count: number;
@@ -923,6 +924,11 @@ function AddJobsTab() {
                           {j.nome}
                         </span>
                         <Badge map={JOB_STATUS} status={j.status} />
+                        {j.strategy === 'INVITE' && (
+                          <span className="text-xs text-blue-400">
+                            modo convite
+                          </span>
+                        )}
                         <span className="text-xs text-text-secondary">
                           {j.dest_instance.nome}
                         </span>
@@ -1616,10 +1622,17 @@ function AddJobSettings({
   const [dMax, setDMax] = useState(String(job.delay_max_s));
   const [instanceId, setInstanceId] = useState(job.dest_instance_id);
   const [autoChain, setAutoChain] = useState(job.auto_chain ?? true);
+  const [strategy, setStrategy] = useState<'ADD' | 'INVITE'>(
+    job.strategy ?? 'ADD',
+  );
   const { instances } = useInstancesAndGroups();
   const [saving, setSaving] = useState(false);
 
   async function save() {
+    if (strategy === 'INVITE' && !link.trim()) {
+      toast.error('Modo convite exige o link do grupo');
+      return;
+    }
     if (enabled && !link.trim()) {
       toast.error('Cole o link de convite ou desligue o fallback');
       return;
@@ -1640,6 +1653,7 @@ function AddJobSettings({
         delay_max_s: Number(dMax) || job.delay_max_s,
         send_invite_on_fail: enabled,
         auto_chain: autoChain,
+        strategy,
         invite_link: link.trim() || null,
         invite_message: message,
       });
@@ -1718,6 +1732,49 @@ function AddJobSettings({
               <Input value={dMax} onChange={(e) => setDMax(e.target.value)} />
             </div>
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Como abordar</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setStrategy('ADD')}
+                className={`rounded-lg border p-3 text-left ${
+                  strategy === 'ADD'
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-zinc-600'
+                }`}
+              >
+                <span className="block text-xs font-medium text-text-primary">
+                  Adicionar direto
+                </span>
+                <span className="block text-[11px] leading-snug text-warning">
+                  O WhatsApp trata como spam e derruba o número.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStrategy('INVITE')}
+                className={`rounded-lg border p-3 text-left ${
+                  strategy === 'INVITE'
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-zinc-600'
+                }`}
+              >
+                <span className="block text-xs font-medium text-text-primary">
+                  Mandar convite
+                </span>
+                <span className="block text-[11px] leading-snug text-text-secondary">
+                  Envia o link no privado. Entra quem quiser.
+                </span>
+              </button>
+            </div>
+            {strategy === 'INVITE' && !link.trim() && (
+              <p className="text-[11px] text-danger">
+                Cadastre o link do grupo abaixo para usar este modo.
+              </p>
+            )}
+          </div>
+
           <label className="flex items-start gap-2 rounded-lg border border-border p-3 cursor-pointer">
             <input
               type="checkbox"
