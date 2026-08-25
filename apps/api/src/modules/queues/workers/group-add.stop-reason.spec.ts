@@ -2,6 +2,7 @@ import { GroupAddWorker, GroupAddJobData } from './group-add.worker';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { UazApiService } from '../../uazapi/uazapi.service';
 import { SenderGateway } from '../../websocket/websocket.gateway';
+import { ProviderResolver } from '../../whatsapp/provider-resolver.service';
 import { Job, Queue } from 'bullmq';
 
 const JOB_ID = 'job-1';
@@ -68,17 +69,24 @@ function makeWorker(prisma: ReturnType<typeof makePrisma>) {
     emitAddJobProgress: jest.fn(),
     emitAddJobCompleted: jest.fn(),
   };
+  const provider = {
+    addGroupParticipants: jest.fn().mockResolvedValue({
+      added: [{ jid: PHONE, status: '200' }],
+      failed: [],
+      participants: [`${PHONE}@s.whatsapp.net`],
+    }),
+    isMemberInList: real.isMemberInList.bind(real),
+  };
   const worker = new GroupAddWorker(
     prisma as unknown as PrismaService,
-    {
-      addGroupParticipants: jest.fn().mockResolvedValue({
-        added: [{ jid: PHONE, status: '200' }],
-        failed: [],
-        participants: [`${PHONE}@s.whatsapp.net`],
-      }),
-      isMemberInList: real.isMemberInList.bind(real),
-    } as unknown as UazApiService,
+    provider as unknown as UazApiService,
     gateway as unknown as SenderGateway,
+    {
+      resolve: (config: unknown) =>
+        config && (config as { uazapi_token?: string }).uazapi_token
+          ? { provider, credential: 'tok' }
+          : null,
+    } as unknown as ProviderResolver,
     queue as unknown as Queue<GroupAddJobData>,
   );
   return { worker, gateway, queue };

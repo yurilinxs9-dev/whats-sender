@@ -1,3 +1,4 @@
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { HealthWorker } from './workers/health.worker';
@@ -14,6 +15,7 @@ export {
 
 @Module({
   imports: [
+    WhatsAppModule,
     BullModule.registerQueue({ name: QUEUE_HEALTH }),
     BullModule.registerQueue({ name: QUEUE_GROUP_ADD }),
   ],
