@@ -162,8 +162,36 @@ export class GroupAddWorker extends WorkerHost {
       });
     }
 
+    const memberId = target.phone || target.member_jid;
+
+    // Modo convite: nao tenta empurrar ninguem para dentro do grupo. Manda o
+    // link no privado e para por ai — quem entra, entra por escolha.
+    if (addJob.strategy === 'INVITE') {
+      if (!addJob.invite_link) {
+        await this.markTarget(
+          targetId,
+          'FAILED',
+          'job em modo convite sem link cadastrado',
+        );
+        await this.prisma.groupAddJob.update({
+          where: { id: jobId },
+          data: { failed_count: { increment: 1 } },
+        });
+        await this.emitAndMaybeComplete(jobId, tenantId);
+        return;
+      }
+      await this.sendInvite(addJob, token, targetId, memberId);
+      // Convite consome o mesmo teto diario da adicao: o que o cap protege e
+      // o numero, e mensagem em massa cansa tanto quanto adicao em massa.
+      await this.prisma.groupAddJob.update({
+        where: { id: jobId },
+        data: { added_today: { increment: 1 } },
+      });
+      await this.emitAndMaybeComplete(jobId, tenantId);
+      return;
+    }
+
     try {
-      const memberId = target.phone || target.member_jid;
       const result = await this.uazapi.addGroupParticipants(
         token,
         addJob.dest_group_jid,

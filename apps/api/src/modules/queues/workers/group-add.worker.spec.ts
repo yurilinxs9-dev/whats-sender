@@ -170,6 +170,44 @@ describe('GroupAddWorker — confirmação de entrada', () => {
     expect(getGroupParticipants).not.toHaveBeenCalled();
   });
 
+  it('em modo convite, manda o link e não tenta adicionar', async () => {
+    const prisma = makePrisma(
+      makeAddJob({
+        strategy: 'INVITE',
+        invite_link: 'https://chat.whatsapp.com/abc',
+      }),
+    );
+    const sendText = jest.fn().mockResolvedValue({ success: true });
+    const addGroupParticipants = jest.fn();
+    const { worker } = makeWorker(prisma, {
+      addGroupParticipants,
+      sendText,
+      isMemberInList,
+    });
+
+    await worker.process(JOB);
+
+    expect(addGroupParticipants).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalled();
+    expect(statusOf(prisma)).toBe('INVITED');
+  });
+
+  it('em modo convite sem link, falha explicando em vez de tentar adicionar', async () => {
+    const prisma = makePrisma(
+      makeAddJob({ strategy: 'INVITE', invite_link: null }),
+    );
+    const addGroupParticipants = jest.fn();
+    const { worker } = makeWorker(prisma, {
+      addGroupParticipants,
+      isMemberInList,
+    });
+
+    await worker.process(JOB);
+
+    expect(addGroupParticipants).not.toHaveBeenCalled();
+    expect(statusOf(prisma)).toBe('FAILED');
+  });
+
   it('envia convite quando não entrou e o convite automático está ligado', async () => {
     const prisma = makePrisma(
       makeAddJob({
