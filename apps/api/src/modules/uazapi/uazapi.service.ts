@@ -458,17 +458,24 @@ export class UazApiService {
   private readParticipantJids(group: unknown): string[] {
     const g = group as Record<string, unknown>;
     const raw = Array.isArray(g.Participants) ? g.Participants : [];
-    return raw
-      .map((p) => {
-        if (typeof p === 'string') return p;
-        const rec = p as Record<string, unknown>;
-        return typeof rec.JID === 'string'
-          ? rec.JID
-          : typeof rec.id === 'string'
-            ? rec.id
-            : '';
-      })
-      .filter((jid) => jid.length > 0);
+    const out: string[] = [];
+    for (const p of raw) {
+      if (typeof p === 'string') {
+        out.push(p);
+        continue;
+      }
+      const rec = p as Record<string, unknown>;
+      // Um participante pode aparecer sob varias identidades. Neste servidor
+      // TODOS vem com JID no formato @lid, e o telefone so existe em
+      // PhoneNumber — procurar so por JID nunca encontra o alvo, que e
+      // guardado como numero. Devolve todas as formas e deixa a comparacao
+      // decidir.
+      for (const key of ['JID', 'LID', 'PhoneNumber', 'id', 'phone']) {
+        const v = rec[key];
+        if (typeof v === 'string' && v.length > 0) out.push(v);
+      }
+    }
+    return out;
   }
 
   /**
