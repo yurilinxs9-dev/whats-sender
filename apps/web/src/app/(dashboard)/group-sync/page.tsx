@@ -1582,7 +1582,9 @@ function AddJobReport({
               {TARGET_STATUS[t.status]?.label ?? t.status}
             </span>
             {t.error && (
-              <span className="text-text-secondary truncate">{t.error}</span>
+              <span className="text-text-secondary truncate flex-1 min-w-0">
+                {t.error}
+              </span>
             )}
             {(t.status === 'FAILED' || t.status === 'NOT_JOINED') && (
               <Button
@@ -1948,8 +1950,8 @@ function FailureReason({ reason, count }: { reason: string; count: number }) {
   const hasMore = short.length < reason.length;
   return (
     <div className="text-xs">
-      <div className="flex justify-between gap-2">
-        <span className="text-text-secondary truncate">{short}</span>
+      <div className="flex justify-between gap-2 min-w-0">
+        <span className="text-text-secondary truncate min-w-0">{short}</span>
         <span className="text-danger shrink-0">{count}</span>
       </div>
       {hasMore && (
