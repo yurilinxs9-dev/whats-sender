@@ -149,7 +149,11 @@ export class GroupAddWorker extends WorkerHost {
 
     await this.prisma.addTarget.update({
       where: { id: targetId },
-      data: { status: 'PROCESSING', attempts: { increment: 1 } },
+      data: {
+        status: 'PROCESSING',
+        attempts: { increment: 1 },
+        last_attempt_at: new Date(),
+      },
     });
     // Voltou a andar: o motivo da parada anterior nao vale mais.
     if (addJob.stop_reason) {

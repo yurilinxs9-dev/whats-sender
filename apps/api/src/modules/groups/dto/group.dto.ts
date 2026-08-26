@@ -109,5 +109,7 @@ export const ListAddTargetsSchema = z.object({
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(200).default(50),
+  // 'last' limita aos alvos tocados desde o ultimo "Rodar lote" manual.
+  round: z.enum(['last']).optional(),
 });
 export type ListAddTargetsDto = z.infer<typeof ListAddTargetsSchema>;

@@ -47,7 +47,7 @@ export class InstancesService {
       where.status = status;
     }
 
-    const [instances, total] = await Promise.all([
+    const [stored, total] = await Promise.all([
       this.prisma.instance.findMany({
         where,
         orderBy: { created_at: 'desc' },
@@ -57,6 +57,8 @@ export class InstancesService {
       this.prisma.instance.count({ where }),
     ]);
 
+    const instances = await this.syncEvolutionStatuses(stored, tenantId);
+
     return {
       instances,
       total,
@@ -64,6 +66,50 @@ export class InstancesService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  /**
+   * O banco so sabe o status de quando alguem conectou pela ultima vez; o
+   * Evolution derruba sessao sem avisar. Como a credencial e a chave global,
+   * da para conferir o estado real de toda a pagina em paralelo — a lista
+   * passa a mostrar a verdade em vez do ultimo clique.
+   */
+  private async syncEvolutionStatuses<
+    T extends { id: string; nome: string; status: string; config: unknown },
+  >(instances: T[], tenantId: string): Promise<T[]> {
+    const evo = instances.filter(
+      (i) =>
+        (i.config as InstanceConfig | null)?.provider === 'evolution' &&
+        i.status !== 'banned',
+    );
+    if (evo.length === 0) return instances;
+
+    const fresh = new Map<string, string>();
+    await Promise.all(
+      evo.map(async (i) => {
+        const name =
+          ((i.config as InstanceConfig).evolution_instance as string) ?? i.nome;
+        try {
+          fresh.set(i.id, await this.evolution.getConnectionState(name));
+        } catch {
+          // Evolution fora do ar: fica o status que o banco tem.
+        }
+      }),
+    );
+
+    for (const i of evo) {
+      const state = fresh.get(i.id);
+      if (!state || state === i.status) continue;
+      await this.prisma.instance.update({
+        where: { id: i.id },
+        data: { status: state },
+      });
+      this.gateway.emitInstanceStatusChanged(i.nome, state, tenantId);
+    }
+
+    return instances.map((i) =>
+      fresh.has(i.id) ? { ...i, status: fresh.get(i.id) as string } : i,
+    );
   }
 
   async findOne(id: string, tenantId: string) {
@@ -320,6 +366,39 @@ export class InstancesService {
     if (!instance) throw new NotFoundException('Instancia nao encontrada');
 
     const config = (instance.config as InstanceConfig) || {};
+
+    if ((config as { provider?: string }).provider === 'evolution') {
+      const name =
+        ((config as { evolution_instance?: string }).evolution_instance as
+          string | undefined) ?? instance.nome;
+      const state = await this.evolution.getConnectionState(name);
+      let qrcode: string | null = null;
+      // Enquanto nao conectou, o Evolution gira o QR — busca um novo para a
+      // tela nao ficar com codigo vencido.
+      if (state !== 'connected') {
+        try {
+          qrcode = (await this.evolution.connectInstance(name)).qrcode;
+        } catch {
+          // QR indisponivel neste instante; o polling tenta de novo.
+        }
+      }
+      if (state !== instance.status) {
+        await this.prisma.instance.update({
+          where: { id },
+          data: { status: state },
+        });
+        this.gateway.emitInstanceStatusChanged(instance.nome, state, tenantId);
+      }
+      return {
+        id: instance.id,
+        nome: instance.nome,
+        status: state,
+        qrcode,
+        profileName: null,
+        owner: null,
+      };
+    }
+
     if (!config.uazapi_token) {
       throw new NotFoundException('Instancia sem token UazAPI.');
     }
