@@ -730,6 +730,8 @@ function AddJobsTab() {
     daily_add_cap: '50',
     delay_min_s: '30',
     delay_max_s: '90',
+    strategy: 'ADD' as 'ADD' | 'INVITE',
+    invite_instance_id: '',
     send_invite_on_fail: false,
     invite_link: '',
     invite_message: DEFAULT_INVITE_MSG,
@@ -784,6 +786,10 @@ function AddJobsTab() {
       toast.error('Preencha todos os campos');
       return;
     }
+    if (form.strategy === 'INVITE' && !form.invite_link.trim()) {
+      toast.error('Modo convite precisa do link do grupo');
+      return;
+    }
     const g = waGroups.find((x) => x.id === form.dest_group_jid);
     setCreating(true);
     try {
@@ -797,6 +803,8 @@ function AddJobsTab() {
         daily_add_cap: Number(form.daily_add_cap),
         delay_min_s: Number(form.delay_min_s),
         delay_max_s: Number(form.delay_max_s),
+        strategy: form.strategy,
+        invite_instance_id: form.invite_instance_id || null,
         send_invite_on_fail: form.send_invite_on_fail,
         invite_link: form.invite_link.trim() || null,
         invite_message: form.invite_message,
@@ -812,6 +820,8 @@ function AddJobsTab() {
         daily_add_cap: '50',
         delay_min_s: '30',
         delay_max_s: '90',
+        strategy: 'ADD',
+        invite_instance_id: '',
         send_invite_on_fail: false,
         invite_link: '',
         invite_message: DEFAULT_INVITE_MSG,
@@ -1091,6 +1101,43 @@ function AddJobsTab() {
               />
             </div>
             <div className="space-y-1.5">
+              <Label>Como contatar os leads</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, strategy: 'ADD' }))}
+                  className={`rounded-lg border p-2.5 text-left ${
+                    form.strategy === 'ADD'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="block text-xs font-medium text-text-primary">
+                    Adicionar direto
+                  </span>
+                  <span className="block text-[11px] leading-snug text-text-secondary">
+                    Empurra pro grupo. Queima número rápido.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, strategy: 'INVITE' }))}
+                  className={`rounded-lg border p-2.5 text-left ${
+                    form.strategy === 'INVITE'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="block text-xs font-medium text-text-primary">
+                    Só convite
+                  </span>
+                  <span className="block text-[11px] leading-snug text-text-secondary">
+                    Manda o link no privado. Muito mais seguro.
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
               <Label>Extração (fonte dos membros)</Label>
               <Select
                 value={form.extraction_id}
@@ -1119,7 +1166,11 @@ function AddJobsTab() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Instância destino (quem adiciona)</Label>
+              <Label>
+                {form.strategy === 'INVITE'
+                  ? 'Instância do grupo (de onde vem a lista de grupos)'
+                  : 'Instância destino (quem adiciona)'}
+              </Label>
               <Select
                 value={form.dest_instance_id}
                 onValueChange={onDestInstance}
@@ -1232,19 +1283,85 @@ function AddJobsTab() {
               </div>
             </div>
 
-            <InviteFields
-              enabled={form.send_invite_on_fail}
-              link={form.invite_link}
-              message={form.invite_message}
-              onToggle={() =>
-                setForm((f) => ({
-                  ...f,
-                  send_invite_on_fail: !f.send_invite_on_fail,
-                }))
-              }
-              onLink={(v) => setForm((f) => ({ ...f, invite_link: v }))}
-              onMessage={(v) => setForm((f) => ({ ...f, invite_message: v }))}
-            />
+            {form.strategy === 'INVITE' && (
+              <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="space-y-1.5">
+                  <Label>Instância que envia os convites</Label>
+                  <p className="text-[11px] leading-snug text-text-secondary">
+                    Pode ser outro número — mandar link no privado não exige ser
+                    admin do grupo. Vazio = usa a instância acima.
+                  </p>
+                  <Select
+                    value={form.invite_instance_id || '_dest'}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        invite_instance_id: v === '_dest' ? '' : v,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_dest">
+                        Mesma instância do grupo
+                      </SelectItem>
+                      {instances.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.nome}
+                          <span
+                            className={`ml-2 text-xs ${i.status === 'connected' ? 'text-primary' : 'text-zinc-500'}`}
+                          >
+                            {i.status === 'connected' ? '● ' : '○ '}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Link do grupo *</Label>
+                  <Input
+                    placeholder="https://chat.whatsapp.com/..."
+                    value={form.invite_link}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, invite_link: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Mensagem do convite</Label>
+                  <textarea
+                    className="w-full rounded-md border border-border bg-background p-2 text-xs text-text-primary"
+                    rows={3}
+                    value={form.invite_message}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, invite_message: e.target.value }))
+                    }
+                  />
+                  <p className="text-[11px] text-text-secondary">
+                    Use {'{link}'} onde o link do grupo deve aparecer.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {form.strategy === 'ADD' && (
+              <InviteFields
+                enabled={form.send_invite_on_fail}
+                link={form.invite_link}
+                message={form.invite_message}
+                onToggle={() =>
+                  setForm((f) => ({
+                    ...f,
+                    send_invite_on_fail: !f.send_invite_on_fail,
+                  }))
+                }
+                onLink={(v) => setForm((f) => ({ ...f, invite_link: v }))}
+                onMessage={(v) => setForm((f) => ({ ...f, invite_message: v }))}
+              />
+            )}
 
             <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 flex gap-2">
               <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
