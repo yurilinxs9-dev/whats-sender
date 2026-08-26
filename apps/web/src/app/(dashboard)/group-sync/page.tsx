@@ -122,6 +122,8 @@ interface AddTarget {
 }
 interface AddJobDetail extends AddJob {
   counts: Record<string, number>;
+  last_round_counts: Record<string, number>;
+  last_round_started_at: string | null;
   failure_reasons: { reason: string; count: number }[];
 }
 interface TargetPage {
@@ -1313,7 +1315,13 @@ function AddJobReport({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<string>('');
-  const counts = job.counts ?? {};
+  // Quem abre o relatorio depois de "Rodar lote" quer ver ESSA rodada, nao os
+  // acumulados de todas — entao a ultima rodada e o recorte inicial.
+  const [lastRoundOnly, setLastRoundOnly] = useState(
+    !!job.last_round_started_at,
+  );
+  const counts =
+    (lastRoundOnly ? job.last_round_counts : job.counts) ?? job.counts ?? {};
   // "Nao entrou" e falha de envio caem no mesmo balde para efeito de convite:
   // os dois significam alguem que ficou de fora do grupo.
   const failedCount = (counts.FAILED ?? 0) + (counts.NOT_JOINED ?? 0);
@@ -1332,6 +1340,7 @@ function AddJobReport({
               page: p,
               page_size: PAGE_SIZE,
               ...(filter && { status: filter }),
+              ...(lastRoundOnly && { round: 'last' }),
             },
           },
         );
@@ -1344,7 +1353,7 @@ function AddJobReport({
         setLoading(false);
       }
     },
-    [job.id, filter],
+    [job.id, filter, lastRoundOnly],
   );
 
   // Trocar de filtro recomeca a paginacao: manter a pagina antiga mostraria
@@ -1390,6 +1399,7 @@ function AddJobReport({
               page: p,
               page_size: CSV_PAGE_SIZE,
               ...(filter && { status: filter }),
+              ...(lastRoundOnly && { round: 'last' }),
             },
           },
         );
@@ -1417,7 +1427,7 @@ function AddJobReport({
       ];
       downloadCsv(
         rows,
-        `adicao-${job.nome}${filter ? `-${filter.toLowerCase()}` : ''}.csv`,
+        `adicao-${job.nome}${filter ? `-${filter.toLowerCase()}` : ''}${lastRoundOnly ? '-ultima-rodada' : ''}.csv`,
       );
     } catch (e) {
       toast.error(errMsg(e, 'Erro ao exportar'));
@@ -1427,6 +1437,32 @@ function AddJobReport({
   }
   return (
     <div className="space-y-3">
+      {job.last_round_started_at && (
+        <div className="flex items-center gap-1 rounded-lg border border-border p-1 w-fit">
+          <button
+            type="button"
+            onClick={() => setLastRoundOnly(true)}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+              lastRoundOnly
+                ? 'bg-primary/15 text-primary'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            Última rodada
+          </button>
+          <button
+            type="button"
+            onClick={() => setLastRoundOnly(false)}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+              !lastRoundOnly
+                ? 'bg-primary/15 text-primary'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            Desde o início
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         <Stat
           icon={<CheckCircle2 className="h-4 w-4 text-green-400" />}

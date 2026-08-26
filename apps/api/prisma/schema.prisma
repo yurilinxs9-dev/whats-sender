@@ -506,6 +506,9 @@ model GroupAddJob {
   // Quantos alvos ainda faltam processar da rodada atual: zera quando a rodada
   // acaba, e e o que distingue "acabou o lote" de "ainda esta rodando".
   run_remaining       Int             @default(0)
+  // Quando o ultimo "Rodar lote" manual comecou (last_run_at marca o FIM).
+  // Rodadas encadeadas automaticamente continuam o mesmo lote.
+  last_round_started_at DateTime?
   // Encadeia rodadas sozinho ate o cap diario. Desligado, cada lote exige um
   // clique — util para observar o comportamento antes de subir volume.
   auto_chain          Boolean         @default(true)
@@ -559,6 +562,8 @@ model AddTarget {
   error      String?
   added_at   DateTime?
   invited_at DateTime?
+  // Ultima vez que o worker pegou este alvo; e o que liga o alvo a uma rodada.
+  last_attempt_at DateTime?
   created_at DateTime        @default(now())
 
   @@unique([job_id, member_jid])

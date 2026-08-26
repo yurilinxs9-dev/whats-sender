@@ -245,7 +245,7 @@ export class GroupsService {
     });
     if (!job) throw new NotFoundException('Job de adição não encontrado');
 
-    const [byStatus, byReason] = await Promise.all([
+    const [byStatus, byReason, byStatusLastRound] = await Promise.all([
       this.prisma.addTarget.groupBy({
         by: ['status'],
         where: { job_id: id },
@@ -256,10 +256,26 @@ export class GroupsService {
         where: { job_id: id, status: 'FAILED' },
         _count: { _all: true },
       }),
+      job.last_round_started_at
+        ? this.prisma.addTarget.groupBy({
+            by: ['status'],
+            where: {
+              job_id: id,
+              last_attempt_at: { gte: job.last_round_started_at },
+            },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const counts: Record<string, number> = {};
     for (const row of byStatus) counts[row.status] = row._count._all;
+
+    // Mesmos totais, so da ultima rodada — e o que o operador olha depois de
+    // clicar Rodar lote; os acumulados de rodadas antigas ficam em `counts`.
+    const last_round_counts: Record<string, number> = {};
+    for (const row of byStatusLastRound)
+      last_round_counts[row.status] = row._count._all;
 
     const failure_reasons = byReason
       .map((row) => ({
@@ -268,7 +284,7 @@ export class GroupsService {
       }))
       .sort((a, b) => b.count - a.count);
 
-    return { ...job, counts, failure_reasons };
+    return { ...job, counts, last_round_counts, failure_reasons };
   }
 
   /**
@@ -284,17 +300,25 @@ export class GroupsService {
     page: number;
     page_size: number;
   }> {
-    await this.assertAddJob(tenantId, id);
+    const job = await this.assertAddJob(tenantId, id);
 
     const where = {
       job_id: id,
       ...(query.status && { status: query.status }),
+      // "Ultima rodada" = alvos que o worker tocou desde o ultimo Rodar lote.
+      ...(query.round === 'last' &&
+        job.last_round_started_at && {
+          last_attempt_at: { gte: job.last_round_started_at },
+        }),
     };
 
     const [items, total] = await Promise.all([
       this.prisma.addTarget.findMany({
         where,
-        orderBy: { created_at: 'asc' },
+        orderBy:
+          query.round === 'last'
+            ? { last_attempt_at: 'asc' }
+            : { created_at: 'asc' },
         skip: (query.page - 1) * query.page_size,
         take: query.page_size,
       }),
@@ -339,6 +363,7 @@ export class GroupsService {
         run_remaining: pending.length,
         stop_reason: null,
         resume_at: null,
+        last_round_started_at: new Date(),
       },
     });
 
