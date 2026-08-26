@@ -163,6 +163,23 @@ export class GroupsService {
    *  Jobs de adição
    * ────────────────────────────────────────────────── */
 
+  /**
+   * A instancia de convite so precisa existir, ter credencial e estar
+   * conectada — nao precisa ser admin do grupo, e mensagem privada.
+   */
+  private async assertInviteInstance(tenantId: string, instanceId: string) {
+    const instance = await this.prisma.instance.findFirst({
+      where: { id: instanceId, tenant_id: tenantId },
+    });
+    if (!instance)
+      throw new NotFoundException('Instância de convite não encontrada');
+    if (!this.providers.resolve(instance.config))
+      throw new BadRequestException(
+        'Instância de convite sem credencial do provedor. Reconecte.',
+      );
+    return instance;
+  }
+
   async createAddJob(tenantId: string, dto: CreateAddJobDto) {
     const extraction = await this.prisma.groupExtraction.findFirst({
       where: { id: dto.extraction_id, tenant_id: tenantId },
@@ -185,6 +202,17 @@ export class GroupsService {
         'Instância destino precisa estar conectada',
       );
 
+    if (dto.invite_instance_id) {
+      await this.assertInviteInstance(tenantId, dto.invite_instance_id);
+    }
+    // Convite exige o link desde o inicio: sem ele o job nasceria sem ter o
+    // que enviar.
+    if (dto.strategy === 'INVITE' && !dto.invite_link) {
+      throw new BadRequestException(
+        'Modo convite precisa do link do grupo (invite_link)',
+      );
+    }
+
     const job = await this.prisma.groupAddJob.create({
       data: {
         nome: dto.nome,
@@ -198,6 +226,8 @@ export class GroupsService {
         delay_min_s: dto.delay_min_s,
         delay_max_s: dto.delay_max_s,
         send_invite_on_fail: dto.send_invite_on_fail,
+        strategy: dto.strategy,
+        invite_instance_id: dto.invite_instance_id ?? null,
         invite_link: dto.invite_link ?? null,
         ...(dto.invite_message && { invite_message: dto.invite_message }),
         status: 'IDLE',
@@ -333,12 +363,25 @@ export class GroupsService {
     if (job.status === 'RUNNING')
       throw new BadRequestException('Job já está rodando');
 
-    const destInstance = await this.prisma.instance.findUnique({
-      where: { id: job.dest_instance_id },
-    });
-    if (!this.providers.resolve(destInstance?.config)) {
+    // Modo convite roda pela instancia de convite quando ela existe; so a
+    // adicao direta exige a instancia destino (que precisa ser admin).
+    const [destInstance, inviteInstance] = await Promise.all([
+      this.prisma.instance.findUnique({ where: { id: job.dest_instance_id } }),
+      job.invite_instance_id
+        ? this.prisma.instance.findUnique({
+            where: { id: job.invite_instance_id },
+          })
+        : Promise.resolve(null),
+    ]);
+    const senderOk =
+      job.strategy === 'INVITE' && inviteInstance
+        ? !!this.providers.resolve(inviteInstance.config)
+        : !!this.providers.resolve(destInstance?.config);
+    if (!senderOk) {
       throw new BadRequestException(
-        'Instância destino sem credencial do provedor. Reconecte.',
+        job.strategy === 'INVITE'
+          ? 'Instância de envio sem credencial do provedor. Reconecte.'
+          : 'Instância destino sem credencial do provedor. Reconecte.',
       );
     }
 
@@ -434,10 +477,17 @@ export class GroupsService {
       );
     }
 
+    if (dto.invite_instance_id) {
+      await this.assertInviteInstance(tenantId, dto.invite_instance_id);
+    }
+
     await this.prisma.groupAddJob.update({
       where: { id },
       data: {
         ...(dto.nome !== undefined && { nome: dto.nome }),
+        ...(dto.invite_instance_id !== undefined && {
+          invite_instance_id: dto.invite_instance_id,
+        }),
         ...(dto.dest_instance_id !== undefined && {
           dest_instance_id: dto.dest_instance_id,
         }),

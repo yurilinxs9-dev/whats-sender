@@ -43,14 +43,12 @@ export class GroupAddWorker extends WorkerHost {
 
     const addJob = await this.prisma.groupAddJob.findUnique({
       where: { id: jobId },
-      include: { dest_instance: true },
+      include: { dest_instance: true, invite_instance: true },
     });
 
     if (mode === 'invite') {
       if (!addJob) return;
-      const inviteResolved = this.providers.resolve(
-        addJob.dest_instance?.config,
-      );
+      const inviteResolved = this.resolveInviteProvider(addJob);
       if (!inviteResolved) {
         await this.markTarget(
           targetId,
@@ -128,12 +126,19 @@ export class GroupAddWorker extends WorkerHost {
       });
     }
 
-    const resolved = this.providers.resolve(addJob.dest_instance?.config);
+    // Modo convite nao passa pela instancia destino: basta o remetente do
+    // convite resolver. Adicao direta continua exigindo a destino.
+    const resolved =
+      addJob.strategy === 'INVITE'
+        ? this.resolveInviteProvider(addJob)
+        : this.providers.resolve(addJob.dest_instance?.config);
     if (!resolved) {
       await this.markTarget(
         targetId,
         'FAILED',
-        'instância destino sem credencial do provedor de WhatsApp',
+        addJob.strategy === 'INVITE'
+          ? 'instância de envio sem credencial do provedor de WhatsApp'
+          : 'instância destino sem credencial do provedor de WhatsApp',
       );
       await this.prisma.groupAddJob.update({
         where: { id: jobId },
@@ -181,7 +186,12 @@ export class GroupAddWorker extends WorkerHost {
         await this.emitAndMaybeComplete(jobId, tenantId);
         return;
       }
-      await this.sendInvite(addJob, resolved, targetId, memberId);
+      await this.sendInvite(
+        addJob,
+        this.resolveInviteProvider(addJob) ?? resolved,
+        targetId,
+        memberId,
+      );
       // Convite consome o mesmo teto diario da adicao: o que o cap protege e
       // o numero, e mensagem em massa cansa tanto quanto adicao em massa.
       await this.prisma.groupAddJob.update({
@@ -227,7 +237,7 @@ export class GroupAddWorker extends WorkerHost {
           if (addJob.send_invite_on_fail && addJob.invite_link) {
             await this.sendInvite(
               addJob,
-              resolved,
+              this.resolveInviteProvider(addJob) ?? resolved,
               targetId,
               memberId,
               'nao entrou no grupo (privacidade bloqueia adicao direta)',
@@ -257,7 +267,13 @@ export class GroupAddWorker extends WorkerHost {
         });
         // Fallback automatico: so quando o toggle esta ligado E existe link cadastrado.
         if (addJob.send_invite_on_fail && addJob.invite_link) {
-          await this.sendInvite(addJob, resolved, targetId, memberId, reason);
+          await this.sendInvite(
+            addJob,
+            this.resolveInviteProvider(addJob) ?? resolved,
+            targetId,
+            memberId,
+            reason,
+          );
         }
       }
 
@@ -311,6 +327,22 @@ export class GroupAddWorker extends WorkerHost {
       );
       return null;
     }
+  }
+
+  /**
+   * Por onde o convite sai: a instancia de convite do job quando existe e
+   * resolve, senao a instancia destino. Separar as duas salva o convite
+   * quando a adicao direta derruba o numero destino.
+   */
+  private resolveInviteProvider(addJob: {
+    dest_instance?: { config: unknown } | null;
+    invite_instance?: { config: unknown } | null;
+  }): ResolvedProvider | null {
+    if (addJob.invite_instance) {
+      const viaInvite = this.providers.resolve(addJob.invite_instance.config);
+      if (viaInvite) return viaInvite;
+    }
+    return this.providers.resolve(addJob.dest_instance?.config);
   }
 
   /**

@@ -118,6 +118,7 @@ model Instance {
   warmup_logs        WarmupLog[]
   group_extractions  GroupExtraction[]
   add_jobs           GroupAddJob[] @relation("InstanceAddJobs")
+  invite_jobs        GroupAddJob[] @relation("InstanceInviteJobs")
 
   @@index([tenant_id])
   @@index([status])
@@ -482,6 +483,11 @@ model GroupAddJob {
   extraction          GroupExtraction @relation(fields: [extraction_id], references: [id])
   dest_instance_id    String
   dest_instance       Instance        @relation("InstanceAddJobs", fields: [dest_instance_id], references: [id])
+  // Por onde os convites saem. Adicionar exige admin do grupo, mas mandar o
+  // link qualquer numero conectado consegue — separar os dois salva o convite
+  // quando a adicao queima o numero destino. Null = usa a dest_instance.
+  invite_instance_id  String?
+  invite_instance     Instance?       @relation("InstanceInviteJobs", fields: [invite_instance_id], references: [id], onDelete: SetNull)
   dest_group_jid      String
   dest_group_name     String          @default("")
   per_run_limit       Int             @default(50)
